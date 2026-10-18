@@ -1,0 +1,48 @@
+diff --git a/benchmarks/tube_saddle.py b/benchmarks/tube_saddle.py
+index e10e161..80aa693 100644
+--- a/benchmarks/tube_saddle.py
++++ b/benchmarks/tube_saddle.py
+@@ -30,7 +30,8 @@ Modes
+          instead of N: the barrier is then Omega = E - mu N of the saddle minus
+          that of the uniform state, the L -> infinity limit without the
+          depletion term of the fixed-N tube (ISSUES C3-13), and delta_N the
+-         atoms the nucleus adds (negative: expelled).
++         atoms the nucleus adds (negative: expelled). --grow m starts from the
++         nucleus lengthened by m cells on each side (staircase seeds).
+ 
+ Lengths in l, energies in hbar omega_perp; densities in atoms per micron.
+ 
+@@ -234,10 +235,24 @@ def start_state(args, grid, psi_U):
+             raise SystemExit(f"cannot embed a tube of {psi0.shape} into {grid.shape}")
+         side = psi_U.repeat(1, 1, pad).to(grid.dtype)
+         psi0 = torch.cat([side, psi0, side], dim=2)
++    if args.grow:
++        psi0 = grow(psi0, args.nz_cell, args.grow)
+     return dipgpe.normalize(grid, psi0, float(dipgpe.norm(grid, psi_U.repeat(1, 1, args.cells).to(grid.dtype)))), \
+         folder.name, image
+ 
+ 
++def grow(psi, nz_cell, m):
++    """A longer nucleus as a Newton seed (C3-2 (e) staircase): the period centred at
++    z = 0 is repeated 2m + 1 times and each front moves out by m cells, taken from the
++    uniform background at the tube ends; the centre (droplet or gap) is kept and the
++    nucleus gains 2m droplets."""
++    nz, c, h, s = psi.shape[-1], psi.shape[-1] // 2, nz_cell // 2, m * nz_cell
++    if nz_cell % 2 == 0 or c - h - s < nz_cell:
++        raise SystemExit(f"cannot grow the nucleus by {m} cells on each side")
++    core = psi[..., c - h:c + h + 1]
++    return torch.cat([psi[..., s:c - h], core.repeat(1, 1, 2 * m + 1), psi[..., c + h + 1:nz - s]], dim=-1)
++
++
+ def _embed_z(f, nz):
+     """Fields (leading axes kept) zero-padded symmetrically along z to nz points."""
+     extra = nz - f.shape[-1]
+@@ -465,6 +480,8 @@ def main():
+     ap.add_argument("--image", type=int, default=None, help="refine: image of a stored string (default: its "
+                     "saddle); a refine run as --from-run gives its saddle (continuation in a_s, embedding in L)")
+     ap.add_argument("--max-newton", type=int, default=8, help="refine: Newton steps")
++    ap.add_argument("--grow", type=int, default=0, help="refine: lengthen the start nucleus by this many cells "
++                    "on each side (2 x this many more droplets)")
+     ap.add_argument("--modes-from", type=str, default=None, help="refine: run whose Hessian modes warm-start the "
+                     "index (default: --from-run)")
+     ap.add_argument("--hessian", action="store_true", help="refine: lowest two Hessian eigenvalues (Morse index)")

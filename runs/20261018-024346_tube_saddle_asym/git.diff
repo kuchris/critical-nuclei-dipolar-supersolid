@@ -1,0 +1,37 @@
+diff --git a/src/dipgpe/mep.py b/src/dipgpe/mep.py
+index 7659146..7d5950a 100644
+--- a/src/dipgpe/mep.py
++++ b/src/dipgpe/mep.py
+@@ -510,8 +510,10 @@ def break_symmetry(model, psi, mode, amplitudes, *, mu=None, deflate=None, tol=N
+     kept). The multiplier beta(a) of that constraint is the slope of the energy
+     along the constrained branch: beta ~ lambda a near psi (lambda < 0 the
+     eigenvalue of the mode), and it changes sign at a symmetry-broken stationary
+-    state. The ``amplitudes`` (increasing) are continued until beta changes sign;
+-    regula falsi (Illinois) on beta narrows the bracket (at most ``secant_steps``
++    state. The ``amplitudes`` (increasing) are continued until beta changes sign
++    (a solve that does not converge is retried halfway from the last converged
++    amplitude, up to four times); regula falsi (Illinois) on beta narrows the
++    bracket (at most ``secant_steps``
+     solves), and Newton without the amplitude constraint polishes the best state.
+ 
+     Returns (psi, info): info = {"scan": [{"a", "beta", "residual", "energy", "N",
+@@ -546,10 +548,16 @@ def break_symmetry(model, psi, mode, amplitudes, *, mu=None, deflate=None, tol=N
+         return out, row
+ 
+     prev, bracket, start = None, None, psi
+-    for a in amplitudes:
++    pending, retries = list(amplitudes), 0
++    while pending:
++        a = pending.pop(0)
+         out, row = solve(a, start)
+-        if not row["converged"]:
+-            break
++        if not row["converged"]:                        # retry halfway from the last converged amplitude
++            if prev is None or retries == 4:            # (at 90.27 a0 one solve past the root failed)
++                break
++            retries += 1
++            pending[:0] = [0.5 * (prev[1]["a"] + a), a]
++            continue
+         if prev is not None and (row["beta"] > 0) != (prev[1]["beta"] > 0):
+             bracket = (prev, (out, row))
+             break

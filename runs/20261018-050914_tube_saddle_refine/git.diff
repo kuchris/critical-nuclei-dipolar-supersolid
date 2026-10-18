@@ -1,0 +1,55 @@
+diff --git a/benchmarks/tube_saddle.py b/benchmarks/tube_saddle.py
+index 42cfbb2..505e32d 100644
+--- a/benchmarks/tube_saddle.py
++++ b/benchmarks/tube_saddle.py
+@@ -210,8 +210,10 @@ def start_state(args, grid, psi_U):
+     continuation) or an image of a pilot string; a shorter tube is embedded in the
+     middle of the uniform state of this a_s (same transverse grid and cell)."""
+     folder = next(dipgpe.runs.runs_dir().glob(args.from_run + "*"))
+-    if (folder / "data" / "saddle.pt").exists():
+-        psi0, image = torch.load(folder / "data" / "saddle.pt"), None
++    if (folder / "data" / f"{args.state}.pt").exists():
++        psi0, image = torch.load(folder / "data" / f"{args.state}.pt"), None
++    elif args.state != "saddle":
++        raise SystemExit(f"{folder.name} has no data/{args.state}.pt")
+     else:
+         image = args.image
+         if image is None:
+@@ -473,6 +475,8 @@ def connect(args, run):
+           f"contrast {geo_s['contrast']:.3f}, {'even sector' if symmetric else 'phase condition'}", flush=True)
+     sides = {}
+     for side, sign in (("shrink", -1.0), ("grow", 1.0)):
++        if side not in args.sides.split(","):
++            continue
+         t0 = time.time()
+         trace = []
+ 
+@@ -493,6 +497,7 @@ def connect(args, run):
+                             tau=args.tau, sector=(lambda f: 0.5 * (f + mirror(f))) if symmetric else None,
+                             deflate=None if symmetric else [_dz(grid, psi_s).real.to(grid.dtype)],
+                             callback=watch, callback_every=args.every)
++        torch.save(psi.cpu(), run.data(f"{side}.pt"))
+         geo = geometry(psi)
+         final = {"omega_minus_uniform": info["omega"] - omega_U, "N_minus_uniform": info["N"] - N,
+                  "residual": info["residual"], **geo}
+@@ -507,8 +512,8 @@ def connect(args, run):
+     run.save_json("tube_saddle_connect.json", {"from_run": folder.name, "symmetric": symmetric, "mu": mu,
+                                                 "barrier": barrier, "saddle": geo_s, "eps": args.eps,
+                                                 "tau": args.tau, "sides": sides})
+-    run.result(barrier=barrier, shrink_reached=sides["shrink"]["reached"], grow_reached=sides["grow"]["reached"],
+-               connected=sides["shrink"]["reached"] and sides["grow"]["reached"])
++    run.result(barrier=barrier, **{f"{k}_reached": v["reached"] for k, v in sides.items()},
++               connected=all(v["reached"] for v in sides.values()) and len(sides) == 2)
+ 
+ 
+ def full_index(model, grid, psi, tol, iters, mu, n, x0=None, save=None):
+@@ -683,6 +688,9 @@ def main():
+     ap.add_argument("--eps", type=float, default=0.05, help="connect: start offset, in units of the nucleus norm")
+     ap.add_argument("--tau", type=float, default=0.5, help="connect: descent step")
+     ap.add_argument("--max-descent", type=int, default=8000, help="connect: descent iterations per side")
++    ap.add_argument("--sides", type=str, default="shrink,grow", help="connect: which sides to descend")
++    ap.add_argument("--state", type=str, default="saddle",
++                    help="refine: the stored state of --from-run to start from (saddle, or shrink/grow of a connect run)")
+     ap.add_argument("--grow-cells", type=float, default=3.0,
+                     help="connect: the growing side counts as reached once the nucleus is this many cells longer")
+     ap.add_argument("--sector", choices=["even", "none"], default="even",

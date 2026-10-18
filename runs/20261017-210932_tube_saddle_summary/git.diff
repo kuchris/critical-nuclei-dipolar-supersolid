@@ -1,0 +1,121 @@
+diff --git a/benchmarks/tube_saddle.py b/benchmarks/tube_saddle.py
+index 4e75444..0c29f28 100644
+--- a/benchmarks/tube_saddle.py
++++ b/benchmarks/tube_saddle.py
+@@ -73,14 +73,29 @@ def tube(args, L, Np, dtype):
+ 
+ 
+ def initial_string(space, args, psi_U, psi_M, n_images):
+-    """Uniform -> crystal patch of ``args.patch`` cells (even about z = 0) -> crystal."""
+-    dtype = space.grid.dtype
++    """Uniform -> crystal patch of ``args.patch`` cells (even about z = 0) -> crystal.
++
++    ``--phase gap``: the tiled cells put droplets at half-integer cell positions, so
++    a gap lies at z = 0. ``--phase droplet``: the crystal is translated by half a
++    cell (spectrally; 17 points per cell) so that a droplet sits at z = 0, and the
++    patch is a smooth window (width ``patch`` cells, edges half a cell) in the
++    uniform state."""
++    grid = space.grid
++    dtype = grid.dtype
+     c, K = args.cells, args.patch
+-    m0 = c // 2 - K // 2
+-    U = psi_U.repeat(1, 1, c)
+-    M = psi_M.repeat(1, 1, c)
+-    seed = torch.cat([psi_U.repeat(1, 1, m0), psi_M.repeat(1, 1, K), psi_U.repeat(1, 1, c - m0 - K)], dim=2)
+-    return path_through(space, [U.to(dtype), seed.to(dtype), M.to(dtype)], n_images)
++    U = psi_U.repeat(1, 1, c).to(dtype)
++    M = psi_M.repeat(1, 1, c).to(dtype)
++    if args.phase == "gap":
++        m0 = c // 2 - K // 2
++        seed = torch.cat([psi_U.repeat(1, 1, m0), psi_M.repeat(1, 1, K), psi_U.repeat(1, 1, c - m0 - K)],
++                         dim=2).to(dtype)
++    else:
++        L = args.cell_um / UNITS.microns(1.0)
++        M = dipgpe.translate(grid, M, (0.0, 0.0, L / 2)).real.to(dtype)
++        z = grid.x64[2]
++        w = (0.5 * (torch.tanh((z + K * L / 2) / (L / 2)) - torch.tanh((z - K * L / 2) / (L / 2)))).to(grid.real_dtype)
++        seed = U * (1 - w) + M * w
++    return path_through(space, [U, seed, M], n_images)
+ 
+ 
+ def cost(args, run):
+@@ -124,7 +139,13 @@ def pilot(args, run):
+     n = int(args.images)
+     if args.from_run:                                  # shorter string: images 0..end_image of a stored string
+         _, stored = _stored(args.from_run)
+-        X0 = path_through(space, [f.to("cuda", grid.dtype) for f in stored[:args.end_image + 1]], n)
++        end = args.end_image
++        if end == "auto":                              # first image past the highest interior one
++            import json
++            folder = next(dipgpe.runs.runs_dir().glob(args.from_run + "*"))
++            E = json.loads((folder / "tube_saddle_pilot.json").read_text(encoding="utf-8"))["energies_minus_E0"]
++            end = min(max(range(1, len(E) - 1), key=lambda i: E[i]) + 1, len(E) - 1)
++        X0 = path_through(space, [f.to("cuda", grid.dtype) for f in stored[:int(end) + 1]], n)
+     else:
+         X0 = initial_string(space, args, psi_U, psi_M, n)
+     history = []
+@@ -175,7 +196,11 @@ def start_state(args, grid, psi_U):
+         image = args.image
+         if image is None:
+             import json
+-            image = json.loads((folder / "tube_saddle_pilot.json").read_text(encoding="utf-8"))["saddle"]
++            pj = json.loads((folder / "tube_saddle_pilot.json").read_text(encoding="utf-8"))
++            image = pj["saddle"]
++            if image is None:                          # no climbing image: the highest interior image
++                E = pj["energies_minus_E0"]
++                image = max(range(1, len(E) - 1), key=lambda i: E[i])
+         psi0 = torch.load(folder / "data" / "string.pt")[image]
+     psi0 = psi0.to("cuda", grid.dtype)
+     extra = grid.shape[2] - psi0.shape[2]
+@@ -318,8 +343,10 @@ def nucleus(line, dz, nz_cell, density):
+     half = C >= 0.5 * C.max()
+     top = background + 0.5 * (n.max() - background)
+     peaks = int(((n > np.roll(n, 1)) & (n >= np.roll(n, -1)) & (n > top)).sum())
++    c, d = n.size // 2, max(nz_cell // 4, 1)
++    centre = "droplet" if n[c] > n[c - d] and n[c] > n[c + d] else "gap"
+     return {"contrast": float(C.max()), "fwhm_um": float(half.sum() * dz), "droplets": peaks,
+-            "background_minus_mean": background - density}
++            "background_minus_mean": background - density, "centre": centre}
+ 
+ 
+ def summary(args, run):
+@@ -338,16 +365,20 @@ def summary(args, run):
+         rows.append({"run": folder.name, "a_s": prm["a"], "cells": prm["cells"], "dx": prm["dx"],
+                      "L_perp": prm["L_perp"], "barrier": out["barrier"], "residual": out["residuals"][-1],
+                      "index": index, **geo, "line": out["line_density_per_um"], "dz_um": out["dz_um"]})
+-    rows.sort(key=lambda r: (r["cells"], r["a_s"]))
+-    print(f"{'a_s':>7} {'cells':>5} {'barrier':>10} {'index':>5} {'contrast':>8} {'FWHM um':>8} {'drops':>5} "
+-          f"{'bg-n /um':>8} {'residual':>9}")
++    rows.sort(key=lambda r: (r["cells"], r["a_s"], r["centre"]))
++    print(f"{'a_s':>7} {'cells':>5} {'centre':>8} {'barrier':>10} {'index':>5} {'contrast':>8} {'FWHM um':>8} "
++          f"{'drops':>5} {'bg-n /um':>8} {'residual':>9}")
+     for r in rows:
+-        print(f"{r['a_s']:7.3f} {r['cells']:5d} {r['barrier']:10.4f} {str(r['index']):>5} {r['contrast']:8.3f} "
+-              f"{r['fwhm_um']:8.1f} {r['droplets']:5d} {r['background_minus_mean']:8.2f} {r['residual']:9.1e}")
++        print(f"{r['a_s']:7.3f} {r['cells']:5d} {r['centre']:>8} {r['barrier']:10.4f} {str(r['index']):>5} "
++              f"{r['contrast']:8.3f} {r['fwhm_um']:8.1f} {r['droplets']:5d} {r['background_minus_mean']:8.2f} "
++              f"{r['residual']:9.1e}")
+     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+     for cells in sorted({r["cells"] for r in rows}):
+-        sel = [r for r in rows if r["cells"] == cells]
+-        ax1.plot([r["a_s"] for r in sel], [r["barrier"] for r in sel], "o-", label=f"{cells} cells")
++        for centre, mark in (("gap", "s"), ("droplet", "o")):
++            sel = [r for r in rows if r["cells"] == cells and r["centre"] == centre]
++            if sel:
++                ax1.plot([r["a_s"] for r in sel], [r["barrier"] for r in sel], mark + "-",
++                         label=f"{cells} cells, {centre} at z = 0")
+     ax1.axvline(89.83, ls=":", c="gray")
+     ax1.set_xlabel("a_s (a0)")
+     ax1.set_ylabel("E_saddle - E_uniform (hbar omega)")
+@@ -383,7 +414,10 @@ def main():
+     ap.add_argument("--iters", type=int, default=12, help="cost: iterations per measurement")
+     ap.add_argument("--minutes", type=float, default=10.0, help="pilot: time budget")
+     ap.add_argument("--from-run", type=str, default=None, help="pilot: start from the string of this run ...")
+-    ap.add_argument("--end-image", type=int, default=None, help="... between its image 0 and this image")
++    ap.add_argument("--end-image", type=str, default=None, help="... between its image 0 and this image "
++                    "(auto: the first image past the highest one)")
++    ap.add_argument("--phase", choices=["gap", "droplet"], default="gap",
++                    help="nucleus seed: a gap or a droplet at z = 0")
+     ap.add_argument("--image", type=int, default=None, help="refine: image of a stored string (default: its "
+                     "saddle); a refine run as --from-run gives its saddle (continuation in a_s, embedding in L)")
+     ap.add_argument("--max-newton", type=int, default=8, help="refine: Newton steps")

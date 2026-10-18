@@ -1,0 +1,15 @@
+{
+ "barrier": 44.52440759608453,
+ "delta_N": -239.5141489400994,
+ "residual": 2.830879699622972e-10,
+ "converged": true,
+ "stalled": false,
+ "newton_steps": 4,
+ "minres": [
+  14,
+  126,
+  124,
+  172
+ ],
+ "seconds": 10.525023221969604
+}

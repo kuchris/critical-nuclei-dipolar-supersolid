@@ -1,0 +1,12 @@
+[dipgpe.runs] recording to C:\Users\kyost\Desktop\git\qs\runs\20261018-111156_tube_saddle_connect
+saddle 20261018-110707_tube_saddle_refine: barrier 92.3055 hbar omega, FWHM 15.6 um, contrast 0.694, phase condition
+  shrink 0: Omega - Omega_U = 92.2657, FWHM 15.4 um, contrast 0.690, residual 8.2e-04  (0 s)
+  shrink 500: Omega - Omega_U = 92.1922, FWHM 15.3 um, contrast 0.688, residual 2.5e-05  (11 s)
+  shrink 1000: Omega - Omega_U = 92.1503, FWHM 15.3 um, contrast 0.686, residual 2.5e-05  (22 s)
+  shrink 1500: Omega - Omega_U = 92.1125, FWHM 14.3 um, contrast 0.685, residual 2.3e-05  (32 s)
+  shrink 2000: Omega - Omega_U = 92.0830, FWHM 14.1 um, contrast 0.683, residual 1.9e-05  (43 s)
+  shrink 2500: Omega - Omega_U = 92.0621, FWHM 14.1 um, contrast 0.681, residual 1.6e-05  (54 s)
+  shrink 3000: Omega - Omega_U = 92.0478, FWHM 14.1 um, contrast 0.680, residual 1.3e-05  (65 s)
+  shrink 3500: Omega - Omega_U = 92.0378, FWHM 14.1 um, contrast 0.678, residual 1.1e-05  (76 s)
+  shrink 4000: Omega - Omega_U = 92.0306, FWHM 14.0 um, contrast 0.677, residual 9.6e-06  (87 s)
+  shrink: NOT reached after 4000 iterations, Omega - Omega_U = 92.0306  (87 s)

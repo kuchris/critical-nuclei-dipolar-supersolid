@@ -1,0 +1,69 @@
+{
+ "id": "20261016-173115_tube_saddle_pilot",
+ "name": "tube_saddle_pilot",
+ "params": {
+  "mode": "pilot",
+  "a": 90.0,
+  "density": 6250.0,
+  "cells": 32,
+  "cell_um": 2.76,
+  "nz_cell": 17,
+  "patch": 8,
+  "dx": 0.25,
+  "L_perp": 24.0,
+  "images": "9",
+  "dtypes": "c64",
+  "step": 0.2,
+  "iters": 12,
+  "minutes": 8.0,
+  "from_run": "20261016-172339",
+  "end_image": 2,
+  "climb_tol": 0.0003,
+  "every": 100
+ },
+ "note": null,
+ "command": [
+  "C:\\Users\\kyost\\Desktop\\git\\qs\\.venv\\Scripts\\python.exe",
+  "benchmarks/tube_saddle.py",
+  "pilot",
+  "--a",
+  "90.0",
+  "--images",
+  "9",
+  "--minutes",
+  "8",
+  "--every",
+  "100",
+  "--step",
+  "0.2",
+  "--climb-tol",
+  "3e-4",
+  "--from-run",
+  "20261016-172339",
+  "--end-image",
+  "2"
+ ],
+ "cwd": "C:\\Users\\kyost\\Desktop\\git\\qs",
+ "git_commit": "8f6e545c581bef919206dedea4d8d0bec5b1d8e7",
+ "git_dirty": true,
+ "environment": {
+  "python": "3.13.15",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "host": "kupro",
+  "torch": "2.11.0+cu128",
+  "cuda": "12.8",
+  "gpu": "NVIDIA GeForce RTX 5070 Ti",
+  "driver": "610.88"
+ },
+ "start": "2026-10-16T17:31:16",
+ "status": "finished",
+ "wall_s": 487.1421482000005,
+ "end": "2026-10-16T17:39:23",
+ "notes": [
+  {
+   "note": "short string (images 0..2 of -172339), climbing: residual e-folds every ~3000 iterations; complex64 energy noise ~0.5 hbar omega; not converged",
+   "invalid": false,
+   "time": "2026-10-16T17:40:09"
+  }
+ ]
+}

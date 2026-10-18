@@ -1,0 +1,97 @@
+diff --git a/src/dipgpe/mep.py b/src/dipgpe/mep.py
+index e9700c2..eca79a7 100644
+--- a/src/dipgpe/mep.py
++++ b/src/dipgpe/mep.py
+@@ -614,7 +614,10 @@ def descend(model, psi, *, mu, max_iter=20_000, tau=0.5, tol=None, deflate=None,
+     iterations; the kinetic one alone needed steps below 0.1 in a trap), kept in
+     ``sector`` and orthogonal to ``deflate`` (fixed fields whose components keep
+     their start values, e.g. a translation phase condition); a step changes the
+-    field by at most 10% of its norm (then the momentum restarts). It is a descent path,
++    field by at most 10% of its norm (then the momentum restarts), and if Omega
++    rises the iteration returns to the last accepted point with half the step (in
++    the 3D tube a fixed step 0.5 diverged; the step recovers after 100 accepted
++    iterations), so the accepted Omega never increases. It is a descent path,
+     not the physical dynamics. Stops when the residual ||H psi - mu psi|| / ||psi||
+     is below ``tol`` (default as :func:`refine_saddle`; a minimum or another
+     stationary state), when ``callback(iteration, psi, info)`` returns True (e.g.
+@@ -622,8 +625,9 @@ def descend(model, psi, *, mu, max_iter=20_000, tau=0.5, tol=None, deflate=None,
+     ``max_iter`` iterations.
+ 
+     Returns (psi, info): info = {"iterations", "omega", "N", "residual",
+-    "converged", "stopped", "diverged", "history" (iteration, omega, N, residual
+-    every ``callback_every`` iterations)}.
++    "converged", "stopped", "diverged", "step" (the final step), "history"
++    (iteration, omega, N, residual every ``callback_every`` iterations)}; psi is
++    the last accepted state.
+     """
+     space = FieldSpace(model, t)
+     grid = model.grid
+@@ -647,38 +651,49 @@ def descend(model, psi, *, mu, max_iter=20_000, tau=0.5, tol=None, deflate=None,
+         return f
+ 
+     x = y = psi
+-    k_mom, history = 0, []
++    k_mom, streak, tau_cur, history, last = 0, 0, tau, [], None
++    info = {"omega": math.nan, "N": math.nan, "residual": math.nan}
+     stopped = converged = diverged = False
+     for it in range(max_iter + 1):
+         if it % 20 == 0:
+             P, _ = space.preconditioner(y[None], m)
+         E, h = space.energy_gradient(y[None])
+-        g = project(h[0] - mu * y)
+         n = ip(y, y)
++        omega = float(E[0]) - mu * n
++        if not omega <= (math.inf if last is None else last["omega"] + 1e-11 * abs(last["omega"])):
++            # Omega rose (or is not finite): back to the last accepted point, half the step, no momentum
++            tau_cur *= 0.5
++            if last is None or tau_cur < 1e-6 * tau:
++                diverged = True
++                break
++            k_mom = streak = 0
++            x = y = last["y"] - tau_cur * last["d"]
++            continue
++        g = project(h[0] - mu * y)
+         res = math.sqrt(ip(g, g) / n) if n > 0 else 0.0
+-        info = {"omega": float(E[0]) - mu * n, "N": n, "residual": res}
+-        if not math.isfinite(info["omega"]):
+-            diverged = True
+-            break
++        info = {"omega": omega, "N": n, "residual": res}
+         if it % callback_every == 0:
+-            history.append((it, info["omega"], n, res))
++            history.append((it, omega, n, res))
+             if callback is not None and callback(it, y, info):
+                 stopped = True
+-                break
+-        if res <= tol:
+-            converged = True
+-            break
+-        if it == max_iter:
+-            break
+-        step = tau * project(P(g[None])[0])
+-        size = math.sqrt(ip(step, step) / n)
++        d = project(P(g[None])[0])
++        size = tau_cur * math.sqrt(ip(d, d) / n) if n > 0 else 0.0
+         if size > 0.1:                                   # at most 10% of the field per step (runaway growth)
+-            step, k_mom = step * (0.1 / size), 0
+-        x_new = y - step
++            d, k_mom = d * (0.1 / size), 0
++        last = {"y": y, "d": d, "omega": omega}
++        if stopped or res <= tol or it == max_iter:
++            converged = res <= tol
++            break
++        streak += 1
++        if streak >= 100 and tau_cur < tau:              # recover the step after 100 accepted iterations
++            tau_cur, streak = min(2 * tau_cur, tau), 0
++        x_new = y - tau_cur * d
+         if ip(g, x_new - x) > 0:                         # gradient restart: momentum points uphill
+             k_mom = 0
+         k_mom += 1
+         y = x_new + ((k_mom - 1) / (k_mom + 2)) * (x_new - x)
+         x = x_new
+-    return y, {"iterations": it, "omega": info["omega"], "N": info["N"], "residual": info["residual"],
+-               "converged": converged, "stopped": stopped, "diverged": diverged, "history": history}
++    out = y if last is None else last["y"]
++    return out, {"iterations": it, "omega": info["omega"], "N": info["N"], "residual": info["residual"],
++                 "converged": converged, "stopped": stopped, "diverged": diverged, "step": tau_cur,
++                 "history": history}

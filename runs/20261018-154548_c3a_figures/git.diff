@@ -1,0 +1,664 @@
+diff --git a/benchmarks/c3a_figures.py b/benchmarks/c3a_figures.py
+index 8b114ff..66ea2f4 100644
+--- a/benchmarks/c3a_figures.py
++++ b/benchmarks/c3a_figures.py
+@@ -23,10 +23,14 @@ Fig. 8  connectivity: schematic of the saddle nudged both ways; energy released
+         the descents (shrinking and growing side), nucleus size (growing) and
+         contrast (shrinking).
+ 
++Journal style as C1: drawn at the printed size (two-column width of REVTeX, 510 pt),
++8 pt STIX text, no lettering below 6 pt.
++
+ Every number is read from the run records named below (docs/RESULTS.md, C3-2);
+ runs marked invalid (dipgpe.runs note --invalid) are refused. The script runs as a
+-run record itself (figures and the numbers they show, result.json); the copies in
+-paper/C3a/figures are for compiling the manuscript.
++run record itself (figures as PDF and PNG, and the numbers they show, result.json);
++the PDFs and SOURCES.txt (the runs each figure reads) are also written into
++paper/C3a/figures for compiling the manuscript.
+ 
+ Usage:
+   uv run python benchmarks/c3a_figures.py [--figs 1,2,3,4,5,6,7,8] [--out paper/C3a/figures]
+@@ -35,6 +39,7 @@ Usage:
+ import argparse
+ import json
+ import sys
++import textwrap
+ from pathlib import Path
+ 
+ import matplotlib
+@@ -43,6 +48,7 @@ import torch
+ 
+ matplotlib.use("Agg")
+ import matplotlib.pyplot as plt  # noqa: E402
++from matplotlib.lines import Line2D  # noqa: E402
+ from matplotlib.patches import Circle, Ellipse, FancyArrowPatch, FancyBboxPatch  # noqa: E402
+ 
+ ROOT = Path(__file__).resolve().parents[1]
+@@ -54,6 +60,7 @@ from tube_saddle import nucleus  # noqa: E402
+ from tube_supersolid import UNITS  # noqa: E402
+ 
+ A_ROT = 89.845                     # BdG roton spinodal on this grid (run 20261005-143507)
++A_ROT_RUN = "20261005-143507"
+ WINDOW = (90.237, 90.274)          # coexistence at fixed n = 6250/um (run 20261008-123945)
+ COEX = "20261008-123945"           # window, coexisting densities and uniform branch mu(n) at 90.256 a0
+ CELL_UM, NZ_CELL, L_PERP, DX, DENSITY = 2.76, 17, 24.0, 0.25, 6250.0
+@@ -118,6 +125,24 @@ CONNECT = [(89.88, "20261018-044820", "20261018-044820"), (90.20, "20261018-0426
+ 
+ STYLE = {"gap": ("s", "#1f77b4"), "droplet": ("o", "#2ca02c"), "asymmetric": ("D", "#9467bd"),
+          "second rung": ("^", "#d62728")}
++W2 = 510 / 72.27                   # two-column width of REVTeX (\textwidth, in): figures drawn at printed size
++
++
++def style():
++    """Journal style as C1: figures drawn at their printed size, 8 pt STIX (Times-like) text."""
++    plt.rcParams.update({
++        "font.family": "STIXGeneral", "mathtext.fontset": "stix", "font.size": 8,
++        "axes.labelsize": 8, "axes.titlesize": 8, "legend.fontsize": 6.5,
++        "xtick.labelsize": 7, "ytick.labelsize": 7, "lines.linewidth": 1.0, "lines.markersize": 3.2,
++        "axes.linewidth": 0.6, "xtick.major.width": 0.6, "ytick.major.width": 0.6,
++        "xtick.minor.width": 0.4, "ytick.minor.width": 0.4, "xtick.direction": "in", "ytick.direction": "in",
++        "xtick.top": True, "ytick.right": True, "legend.frameon": False, "legend.handlelength": 1.6,
++        "savefig.dpi": 300, "figure.dpi": 150, "axes.formatter.use_mathtext": True, "pdf.fonttype": 42})
++
++
++def title(ax, label, text=""):
++    """Bold panel label and a short description, left-aligned above the panel."""
++    ax.set_title(rf"$\mathbf{{{label}}}$ {text}".rstrip(), loc="left", pad=3)
+ 
+ 
+ def folder(rid):
+@@ -212,7 +237,7 @@ def coexistence():
+     return 1.0 / dmu_dn, drive
+ 
+ 
+-def by_kind(ax, x, y, kinds, ms=4, **kw):
++def by_kind(ax, x, y, kinds, ms=3.5, **kw):
+     for kind, (m, col) in STYLE.items():
+         sel = [i for i, k in enumerate(kinds) if k == kind]
+         if sel:
+@@ -226,14 +251,50 @@ def window(ax):
+ 
+ 
+ def save(fig, out, name):
+-    """PDF and PNG into every directory of ``out`` (the run record and paper/C3a/figures)."""
+-    fig.tight_layout()
++    """PDF into every directory of ``out`` (the run record first, then paper/C3a/figures); PNG for viewing
++    into the run record only."""
++    fig.tight_layout(pad=0.3)
+     for d in out:
+-        for ext in ("pdf", "png"):
+-            fig.savefig(Path(d) / f"{name}.{ext}", dpi=200)
++        fig.savefig(Path(d) / f"{name}.pdf")
++    fig.savefig(Path(out[0]) / f"{name}.png", dpi=200)
+     plt.close(fig)
+ 
+ 
++def sources():
++    """The runs each figure reads, for figures/SOURCES.txt."""
++    def ids(refs):
++        return sorted({r if isinstance(r, str) else f"{r[0]} (rung {r[1]})" for r in refs})
++    barriers = [r[1] for r in BARRIERS]
++    finite = [m for m, _ in FINITE_L.values()] + [r for _, runs in FINITE_L.values() for r in runs.values()]
++    return {
++        "fig1_concept": ids([NUCLEUS[0], STRING_90, COEX]),
++        "fig2_shape": ids([r for _, r in SHAPES] + barriers),
++        "fig3_barrier": ids(barriers + [r for _, r in SIGMA]),
++        "fig4_roton_end": ids([r[1] for r in BARRIERS if r[0] <= 90.20]),
++        "fig5_finite_tube": ids(finite + barriers + [COEX]),
++        "fig6_eigenvalues": ids(EIG_N["gap"] + EIG_N["droplet"] + EIG_MU["gap"] + EIG_MU["droplet"]
++                                + [r for r, _ in EIG_FULL]),
++        "fig7_edge": ids([ref for states in STAIRS.values() for ref, _ in states] + [r for r, _ in TRACES.values()]
++                         + [r[1] for r in BARRIERS if r[0] in EDGE] + [r for _, r in SIGMA] + [COEX]),
++        "fig8_connectivity": ids([rid for row in CONNECT for rid in row[1:]]),
++    }
++
++
++def write_sources(out, run_dir):
++    head = (f"Figures of paper C3a, written by benchmarks/c3a_figures.py into this folder and into its run record "
++            f"runs/{run_dir.name} (same PDFs, plus PNGs; the numbers the figures show are in its result.json, the "
++            f"git commit in its meta.json). Journal style: drawn at the printed two-column width (510 pt), 8 pt "
++            f"STIX text. Every figure reads only the stored runs listed below; runs marked invalid are refused. "
++            f"Constants in the script: roton spinodal {A_ROT} a0 (run {A_ROT_RUN}), metastable window "
++            f"{WINDOW[0]}-{WINDOW[1]} a0 (run {COEX}), E_b = {NEWTON_90} at 90.0 a0 (Newton, fixed N; RESULTS).")
++    lines = textwrap.wrap(head, 100) + [""]
++    for name, refs in sources().items():
++        lines += textwrap.wrap(f"{name}.pdf ({len(refs)} runs): " + ", ".join(refs), 100,
++                               subsequent_indent="    ") + [""]
++    for d in out:
++        (Path(d) / "SOURCES.txt").write_text("\n".join(lines), encoding="utf-8", newline="\n")
++
++
+ # ---- schematic panels (drawn shapes, no data) ----
+ 
+ def schematic_axes(fig, spec, xmax, ymax):
+@@ -241,12 +302,13 @@ def schematic_axes(fig, spec, xmax, ymax):
+     ax.set_xlim(0, xmax)
+     ax.set_ylim(0, ymax)
+     ax.set_aspect("equal")
++    ax.set_anchor("W")                                 # left-aligned, like the panels below
+     ax.axis("off")
+     return ax
+ 
+ 
+ def arrow(ax, p, q, rad=0.0, ls="-", color="0.25"):
+-    ax.add_patch(FancyArrowPatch(p, q, arrowstyle="-|>", mutation_scale=7, lw=0.9, ls=ls, color=color,
++    ax.add_patch(FancyArrowPatch(p, q, arrowstyle="-|>", mutation_scale=7, lw=0.8, ls=ls, color=color,
+                                  connectionstyle=f"arc3,rad={rad}", shrinkA=0, shrinkB=0))
+ 
+ 
+@@ -272,7 +334,7 @@ def tubes_schematic(ax):
+             ax.add_patch(Ellipse((2.8 + dx, y), 0.1, 0.36, fc="#1D9E75", ec="none"))
+         for s in (-1, 1):
+             arrow(ax, (2.8 + 0.35 * s, y), (2.8 + 0.85 * s, y), color="0.45")
+-        ax.text(x1 + 0.12, y, label, va="center", fontsize=8)
++        ax.text(x1 + 0.12, y, label, va="center")
+     lines = (r"fixed $N$: the $|\Delta N|$ atoms the nucleus expels stay in the tube;",
+              r"the background gains $|\Delta N|/L$, which costs $\Delta N^2/(2\kappa L)$",
+              r"fixed $\mu$: they leave to a reservoir; $\Delta\Omega$ is the $L\to\infty$ barrier",
+@@ -288,17 +350,17 @@ def sliding_schematic(ax):
+             (5.1, drop_col, "droplet-centred", ((-0.84, 0.28), (-0.42, 0.5), (0, 0.5), (0.42, 0.5), (0.84, 0.28))))
+     for cx, col, label, drops in bags:
+         ax.add_patch(FancyBboxPatch((cx - 1.2, 1.65), 2.4, 0.85, boxstyle="round,pad=0,rounding_size=0.35",
+-                                    fill=False, ec=col, ls="--", lw=0.9))
++                                    fill=False, ec=col, ls="--", lw=0.8))
+         for dx, h in drops:
+             ax.add_patch(Ellipse((cx + dx, 2.075), 0.16, h, fc="0.55", ec="none"))
+         ax.plot([cx, cx], [1.5, 1.6], color=col, lw=1.2)
+-        ax.text(cx, 1.25, label, ha="center", va="center", fontsize=7.5, color=col)
++        ax.text(cx, 1.25, label, ha="center", va="center", fontsize=7, color=col)
+     arrow(ax, (2.85, 2.075), (3.75, 2.075))
+     ax.text(3.3, 2.8, "slide droplets\nby half a period", ha="center", va="center", fontsize=6.5)
+     cases = (("90.05–90.23", lambda u: np.cos(2 * np.pi * u), "droplet-centred\nin the valley"),
+              ("90.24–90.26", lambda u: -np.cos(2 * np.pi * u), "gap-centred\nin the valley"),
+              ("90.27", lambda u: np.cos(4 * np.pi * u), "valley in between:\nasymmetric"))
+-    for k, (title, E, caption) in enumerate(cases):
++    for k, (label, E, caption) in enumerate(cases):
+         x0 = 7.0 + 2.4 * k
+ 
+         def X(v, x0=x0):
+@@ -308,13 +370,13 @@ def sliding_schematic(ax):
+             return 2.0 + 0.32 * E(np.asarray(v))
+         u = np.linspace(0, 1, 81)
+         ax.plot(X(u), Y(u), color="0.4", lw=0.9)
+-        ax.plot(X([0, 1]), Y([0, 1]), "s", color=gap_col, ms=4)
+-        ax.plot(X(0.5), Y(0.5), "o", color=drop_col, ms=4.5)
++        ax.plot(X([0, 1]), Y([0, 1]), "s", color=gap_col, ms=3.5)
++        ax.plot(X(0.5), Y(0.5), "o", color=drop_col, ms=4)
+         if k == 2:
+-            ax.plot(X([0.25, 0.75]), Y([0.25, 0.75]), "D", color=asym_col, ms=4)
+-        ax.text(X(0.5), 2.75, f"$a_s$ = {title}", ha="center", va="center", fontsize=6.5)
+-        for v, label in ((0, "gap"), (0.5, "droplet"), (1, "gap")):
+-            ax.text(X(v), 1.45, label, ha="center", va="center", fontsize=5.5, color="0.35")
++            ax.plot(X([0.25, 0.75]), Y([0.25, 0.75]), "D", color=asym_col, ms=3.5)
++        ax.text(X(0.5), 2.75, f"$a_s$ = {label}", ha="center", va="center", fontsize=6.5)
++        for v, name in ((0, "gap"), (0.5, "droplet"), (1, "gap")):
++            ax.text(X(v), 1.45, name, ha="center", va="center", fontsize=6, color="0.35")
+         ax.text(X(0.5), 0.95, caption, ha="center", va="center", fontsize=6.5)
+     ax.text(10.3, 0.3, "valley: sliding eigenvalue > 0;  hump: < 0", ha="center", va="center", fontsize=6.5,
+             color="0.3")
+@@ -325,7 +387,7 @@ def rolling_schematic(ax):
+     typical = ((0.0, 0.0), (0.12, 0.02), (0.30, 0.55), (0.45, 1.0), (0.62, 0.55), (0.80, -0.55), (0.95, -1.6))
+     edge = ((0.0, 0.0), (0.12, 0.02), (0.28, 0.6), (0.38, 0.95), (0.47, 0.70), (0.55, 1.05), (0.68, 0.55),
+             (0.82, -0.45), (0.95, -1.4))
+-    for x0, pts, title, ball, stop in ((0.4, typical, "typical (89.88, 90.20)", 0.45, None),
++    for x0, pts, label, ball, stop in ((0.4, typical, "typical (89.88, 90.20)", 0.45, None),
+                                       (7.4, edge, "near the edge (90.27, 90.272)", 0.38, 0.47)):
+         def X(u, x0=x0):
+             return x0 + 6.0 * np.asarray(u)
+@@ -334,7 +396,7 @@ def rolling_schematic(ax):
+             return 1.45 + 0.85 * np.asarray(e)
+         c = catmull(pts)
+         E = dict(pts)
+-        ax.plot(X(c[:, 0]), Y(c[:, 1]), color="0.4", lw=1.0)
++        ax.plot(X(c[:, 0]), Y(c[:, 1]), color="0.4", lw=0.9)
+         bx, by = float(X(ball)), float(Y(E[ball])) + 0.15
+         ax.add_patch(Circle((bx, by), 0.13, fc="#D85A30", ec="none", zorder=3))
+         arrow(ax, (bx - 0.2, by + 0.02), (float(X(0.18)), float(Y(0.22)) + 0.2), rad=0.35, ls="--")
+@@ -344,10 +406,10 @@ def rolling_schematic(ax):
+             sx, sy = float(X(stop)), float(Y(E[stop])) + 0.13
+             arrow(ax, (bx + 0.16, by - 0.02), (sx - 0.05, sy + 0.02), rad=-0.5)
+             ax.add_patch(Circle((sx, sy), 0.09, fc="none", ec="0.25", lw=0.8))
+-            ax.text(sx, sy - 0.5, "plateau", ha="center", va="center", fontsize=6)
++            ax.text(sx, sy - 0.5, "plateau", ha="center", va="center", fontsize=6.5)
+         ax.text(float(X(0.0)), float(Y(0.0)) - 0.32, "uniform", fontsize=6.5)
+         ax.text(float(X(0.95)) + 0.1, float(Y(pts[-1][1])) + 0.15, "crystal\ngrows", fontsize=6.5)
+-        ax.text(float(X(0.5)), 2.85, title, ha="center", va="center", fontsize=7.5)
++        ax.text(float(X(0.5)), 2.85, label, ha="center", va="center", fontsize=7)
+ 
+ 
+ def fig1(out):
+@@ -361,7 +423,7 @@ def fig1(out):
+     z = (np.arange(nz) - nz // 2) * CELL_UM / NZ_CELL
+     y = (np.arange(ny) - ny // 2) * DX * um
+ 
+-    fig = plt.figure(figsize=(7.2, 5.0))
++    fig = plt.figure(figsize=(W2, 4.1))
+     ax = fig.add_subplot(2, 2, 1)
+     ax.imshow(slice_yz, origin="lower", aspect="auto", cmap="magma",
+               extent=[z[0], z[-1], y[0], y[-1]])
+@@ -369,17 +431,17 @@ def fig1(out):
+     ax.set_ylim(-4, 4)
+     ax.set_xlabel(r"$z$ ($\mu$m)")
+     ax.set_ylabel(r"$y$ ($\mu$m)")
+-    ax.set_title("(a) critical nucleus at 90.0 $a_0$ (density, $x=0$)", fontsize=9, loc="left")
+-    ax.annotate("", xy=(-25, 3.4), xytext=(-25, 1.4), arrowprops=dict(arrowstyle="->", color="w"))
+-    ax.text(-23.5, 2.4, r"$\mathbf{d}\parallel y$", color="w", fontsize=8, va="center")
++    title(ax, "(a)", "critical nucleus at 90.0 $a_0$ (density, $x=0$)")
++    ax.annotate("", xy=(-25, 3.4), xytext=(-25, 1.4), arrowprops=dict(arrowstyle="->", color="w", lw=0.8))
++    ax.text(-23.5, 2.4, r"$\mathbf{d}\parallel y$", color="w", fontsize=7, va="center")
+ 
+     ax = fig.add_subplot(2, 2, 2)
+-    ax.plot(z, line_um / 1e3, lw=1)
++    ax.plot(z, line_um / 1e3)
+     ax.axhline(6.25, color="0.5", ls="--", lw=0.8)
+     ax.set_xlim(-30, 30)
+     ax.set_xlabel(r"$z$ ($\mu$m)")
+     ax.set_ylabel(r"$n(z)$ ($10^3\,\mu$m$^{-1}$)")
+-    ax.set_title("(b) line density; dashed: uniform superfluid", fontsize=9, loc="left")
++    title(ax, "(b)", "line density; dashed: uniform superfluid")
+ 
+     ax = fig.add_subplot(2, 2, 3)
+     ax.axvspan(89.68, A_ROT, color="0.85")
+@@ -389,37 +451,38 @@ def fig1(out):
+     ax.text(89.762, 0.55, "superfluid\nunstable", ha="center", va="center", fontsize=7)
+     ax.text(90.04, 0.55, "superfluid metastable:\ncrystal by nucleation", ha="center", va="center", fontsize=7)
+     ax.text(90.347, 0.55, "superfluid\nstable", ha="center", va="center", fontsize=7)
+-    ax.text(90.255, 0.9, "coexist.", ha="center", va="center", fontsize=6)
+-    ax.annotate("", xy=(89.72, 0.15), xytext=(90.40, 0.15), arrowprops=dict(arrowstyle="->"))
+-    ax.text(90.06, 0.22, r"ramp $a_s$ down", ha="center", fontsize=7)
++    ax.text(90.2555, 0.62, "coexistence", ha="center", va="center", fontsize=6, rotation=90)
++    ax.annotate("", xy=(89.72, 0.15), xytext=(90.40, 0.15), arrowprops=dict(arrowstyle="->", lw=0.8))
++    ax.text(90.06, 0.2, r"ramp $a_s$ down", ha="center", fontsize=7)
+     ax.set_xlim(89.68, 90.42)
+     ax.set_ylim(0, 1)
+     ax.set_yticks([])
++    ax.tick_params(top=False)
+     ax.set_xticks([A_ROT, WINDOW[1]])
+     ax.set_xticklabels([r"$a_{\rm rot}^*$" + "\n89.845", "edge\n90.274"])
+     ax.set_xlabel(r"$a_s$ ($a_0$)")
+-    ax.set_title("(c) the metastable window at 6250 $\\mu$m$^{-1}$", fontsize=9, loc="left")
++    title(ax, "(c)", r"the metastable window at $6250\,\mu$m$^{-1}$")
+ 
+     ax = fig.add_subplot(2, 2, 4)
+     pj = json.loads((folder(STRING_90) / "tube_saddle_pilot.json").read_text(encoding="utf-8"))
+     E = np.array(pj["energies_minus_E0"])[:-1]         # last image: the fixed end of this segment
+     s = np.linspace(0, 1, len(E))
+-    ax.plot(s, E, "o-", ms=3, lw=1, color="0.3")
++    ax.plot(s, E, "o-", color="0.3")
+     c = pj["saddle"]
+-    ax.plot(s[c], E[c], "o", color="#d62728", ms=6)
++    ax.plot(s[c], E[c], "o", color="#d62728", ms=5)
+     ax.axhline(0, color="0.6", lw=0.6)
+-    ax.annotate(r"critical nucleus ($E_b$)", xy=(s[c], E[c]), xytext=(0.05, -140), fontsize=8,
++    ax.annotate(r"critical nucleus ($E_b$)", xy=(s[c], E[c]), xytext=(0.05, -140), fontsize=7,
+                 arrowprops=dict(arrowstyle="->", lw=0.6))
+-    ax.text(0.0, -45, "uniform", fontsize=8)
+-    ax.text(0.35, -330, "nucleus grows:\ncrystal", fontsize=8)
++    ax.text(0.0, -45, "uniform", fontsize=7)
++    ax.text(0.35, -330, "nucleus grows:\ncrystal", fontsize=7)
+     ax.set_xlabel("path coordinate (string images)")
+     ax.set_ylabel(r"$E - E_U$ ($\hbar\omega_\perp$)")
+-    ax.set_title(f"(d) string path at 90.0 $a_0$ ($E_b$ = {NEWTON_90:.1f})", fontsize=9, loc="left")
++    title(ax, "(d)", f"string path at 90.0 $a_0$ ($E_b$ = {NEWTON_90:.1f})")
+     save(fig, out, "fig1_concept")
+ 
+ 
+ def fig2(out):
+-    fig = plt.figure(figsize=(7.2, 4.4))
++    fig = plt.figure(figsize=(W2, 3.4))
+     gs = fig.add_gridspec(2, 2, width_ratios=[1.5, 1])
+     ax = fig.add_subplot(gs[:, 0])
+     colors = plt.get_cmap("viridis")(np.linspace(0, 0.85, len(SHAPES)))
+@@ -429,28 +492,29 @@ def fig2(out):
+         ax.plot(z, (line - DENSITY) / 1e3 + 10 * k, lw=0.8, color=col)
+         ax.text(-43, 10 * k + 1.5, f"{a_s:g} $a_0$", color=col, fontsize=7)
+     ax.plot([41, 41], [2.5, 7.5], color="k", lw=1.2)
+-    ax.text(40, 5, r"$5\times10^3\,\mu$m$^{-1}$", ha="right", va="center", fontsize=6)
++    ax.text(40, 5, r"$5\times10^3\,\mu$m$^{-1}$", ha="right", va="center", fontsize=6.5)
+     ax.set_xlim(-44, 44)
+     ax.set_yticks([])
++    ax.tick_params(right=False)
+     ax.set_xlabel(r"$z$ ($\mu$m)")
+     ax.set_ylabel(r"$n(z) - n$ (curves offset)")
+-    ax.set_title("(a) line density of the critical nucleus (fixed $\\mu$)", fontsize=9, loc="left")
++    title(ax, "(a)", r"line density of the critical nucleus (fixed $\mu$)")
+     rows = [(a, kind, geometry(ref)) for a, ref, kind in BARRIERS]
+     a = [r[0] for r in rows]
+     kinds = [r[1] for r in rows]
+     bx = fig.add_subplot(gs[0, 1])
+     cx = fig.add_subplot(gs[1, 1], sharex=bx)
+-    by_kind(bx, a, [r[2]["contrast"] for r in rows], kinds, ms=3.5)
+-    by_kind(cx, a, [r[2]["fwhm_um"] for r in rows], kinds, ms=3.5)
++    by_kind(bx, a, [r[2]["contrast"] for r in rows], kinds)
++    by_kind(cx, a, [r[2]["fwhm_um"] for r in rows], kinds)
+     for axis in (bx, cx):
+         window(axis)
+     bx.set_ylabel("peak contrast")
+-    bx.set_title("(b) depth", fontsize=9, loc="left")
+-    bx.legend(fontsize=6, frameon=False, loc="lower right")
++    title(bx, "(b)", "depth")
++    bx.legend(fontsize=6, loc="lower right")
+     plt.setp(bx.get_xticklabels(), visible=False)
+     cx.set_ylabel(r"FWHM ($\mu$m)")
+     cx.set_xlabel(r"$a_s$ ($a_0$)")
+-    cx.set_title("(c) length", fontsize=9, loc="left")
++    title(cx, "(c)", "length")
+     save(fig, out, "fig2_shape")
+     return {a_: (round(g["contrast"], 3), round(g["fwhm_um"], 1), g["droplets"]) for a_, _, g in rows}
+ 
+@@ -459,7 +523,7 @@ def fig3(out):
+     a = np.array([r[0] for r in BARRIERS])
+     E = np.array([barrier(r[1]) for r in BARRIERS])
+     kinds = [r[2] for r in BARRIERS]
+-    fig, (ax, bx) = plt.subplots(1, 2, figsize=(7.2, 3.2), gridspec_kw={"width_ratios": [1.6, 1]})
++    fig, (ax, bx) = plt.subplots(1, 2, figsize=(W2, 2.7), gridspec_kw={"width_ratios": [1.6, 1]})
+     sa = np.array([s_ for s_, _ in SIGMA])
+     for axis in (ax, bx):
+         by_kind(axis, a, E, kinds)
+@@ -470,8 +534,8 @@ def fig3(out):
+     ax.set_xlabel(r"$a_s$ ($a_0$)")
+     ax.set_ylabel(r"$E_b$ ($\hbar\omega_\perp$)")
+     ax.set_xlim(89.83, 90.285)
+-    ax.set_title(r"(a) barrier at fixed $\mu$ ($L\to\infty$)", fontsize=9, loc="left")
+-    ax.legend(fontsize=7, loc="lower right", frameon=False)
++    title(ax, "(a)", r"barrier at fixed $\mu$ ($L\to\infty$)")
++    ax.legend(loc="lower right")
+     ins = ax.inset_axes([0.1, 0.5, 0.34, 0.36])
+     ac, p = roton_fit()
+     near = a <= 90.0
+@@ -479,15 +543,14 @@ def fig3(out):
+     xs = np.linspace(ac, 90.0, 50)
+     ins.plot(xs, np.polyval(p, xs), "-", lw=0.8, color="0.3")
+     ins.axvline(A_ROT, color="0.5", ls=":", lw=0.8)
+-    ins.set_xlabel(r"$a_s$", fontsize=7)
+-    ins.set_ylabel(r"$E_b^{2/3}$", fontsize=7)
++    ins.set_xlabel(r"$a_s$ ($a_0$)", fontsize=7, labelpad=1)
++    ins.set_ylabel(r"$E_b^{2/3}$", fontsize=7, labelpad=1)
+     ins.tick_params(labelsize=6)
+-    ins.text(ac + 0.005, 3.0, f"$a_c$ = {ac:.3f}", fontsize=6)
++    ins.text(ac + 0.005, 3.0, f"$a_c$ = {ac:.3f}", fontsize=6.5)
+     bx.set_xlim(90.235, 90.276)
+     bx.set_ylim(72, 97)
+     bx.set_xlabel(r"$a_s$ ($a_0$)")
+-    bx.set_title("(b) near the coexistence edge", fontsize=9, loc="left")
+-    bx.tick_params(axis="x", labelsize=7)
++    title(bx, "(b)", "near the coexistence edge")
+     save(fig, out, "fig3_barrier")
+     return dict(zip(a.tolist(), E.tolist())), ac
+ 
+@@ -501,18 +564,18 @@ def fig4(out):
+     C = np.array([g["contrast"] for g in geo])
+     W = np.array([g["fwhm_um"] for g in geo])
+     kinds = [r[2] for r in rows]
+-    fig, axs = plt.subplots(1, 3, figsize=(7.2, 2.5))
+-    panels = ((E / eps ** 1.5, r"$E_b\,/\,\varepsilon^{3/2}$ ($\hbar\omega_\perp\,a_0^{-3/2}$)", "(a) barrier"),
+-              (C / eps ** 0.5, r"contrast$\,/\,\varepsilon^{1/2}$ ($a_0^{-1/2}$)", "(b) depth"),
+-              (W * eps ** 0.5, r"FWHM$\,\varepsilon^{1/2}$ ($\mu$m$\,a_0^{1/2}$)", "(c) length"))
+-    for ax, (y, label, title) in zip(axs, panels):
++    fig, axs = plt.subplots(1, 3, figsize=(W2, 2.2))
++    panels = ((E / eps ** 1.5, r"$E_b\,/\,\varepsilon^{3/2}$ ($\hbar\omega_\perp\,a_0^{-3/2}$)", "(a)", "barrier"),
++              (C / eps ** 0.5, r"contrast$\,/\,\varepsilon^{1/2}$ ($a_0^{-1/2}$)", "(b)", "depth"),
++              (W * eps ** 0.5, r"FWHM$\,\varepsilon^{1/2}$ ($\mu$m$\,a_0^{1/2}$)", "(c)", "length"))
++    for ax, (y, label, letter, text) in zip(axs, panels):
+         by_kind(ax, eps, y, kinds)
+         ax.set_xscale("log")
+         ax.set_ylim(0, 1.15 * y.max())
+         ax.set_xlabel(r"$\varepsilon = a_s - a_c$ ($a_0$)")
+-        ax.set_ylabel(label, fontsize=8)
+-        ax.set_title(title, fontsize=9, loc="left")
+-    axs[0].legend(fontsize=6, frameon=False, loc="lower left")
++        ax.set_ylabel(label)
++        title(ax, letter, text)
++    axs[0].legend(fontsize=6, loc="lower left")
+     save(fig, out, "fig4_roton_end")
+     # last entry: E_b w / A^2 with A the contrast, independent of a_c (4c/3 in the amplitude equation)
+     return {round(float(e), 4): (round(float(x), 1), round(float(c), 3), round(float(w), 2), round(float(v), 0))
+@@ -521,11 +584,11 @@ def fig4(out):
+ 
+ def fig5(out):
+     kappa, _ = coexistence()
+-    fig = plt.figure(figsize=(7.2, 4.4))
+-    gs = fig.add_gridspec(2, 3, height_ratios=[1.0, 2.0], width_ratios=[1.2, 1, 1])
++    fig = plt.figure(figsize=(W2, 3.8))
++    gs = fig.add_gridspec(2, 3, height_ratios=[0.9, 2.0], width_ratios=[1.2, 1, 1])
+     sx = schematic_axes(fig, gs[0, :], 14, 2.6)
+     tubes_schematic(sx)
+-    sx.set_title(r"(a) a nucleus in a tube of fixed $N$ (schematic)", fontsize=9, loc="left")
++    title(sx, "(a)", r"a nucleus in a tube of fixed $N$ (schematic)")
+     ax, bx, cx = (fig.add_subplot(gs[1, k]) for k in range(3))
+     colors = plt.get_cmap("plasma")(np.linspace(0.0, 0.8, len(FINITE_L)))
+     ratios = {}
+@@ -535,31 +598,31 @@ def fig5(out):
+         L = np.array(cells) * CELL_UM
+         E = np.array([barrier(runs[c]) for c in cells])
+         Ls = np.geomspace(70, 450, 20)
+-        ax.loglog(L, E - omega, "o", color=col, ms=4)
++        ax.loglog(L, E - omega, "o", color=col, ms=3.5)
+         ax.loglog(Ls, dN ** 2 / (2 * kappa * Ls), "-", color=col, lw=0.8)
+         # E(L) - E(2L) against Delta N^2/(4 kappa L): no fixed-mu reference (its own finite-size error,
+         # ~3e-4 at 89.90 a0, would dominate the long-tube excess of 0.01)
+         diff = (E[:-1] - E[1:]) / (dN ** 2 / (4 * kappa * L[:-1]))
+-        bx.plot(1 / L[:-1], diff, "o-", color=col, ms=4, lw=0.8, label=f"{a_s:.2f}")
++        bx.plot(1 / L[:-1], diff, "o-", color=col, ms=3.5, lw=0.8, label=f"{a_s:.2f}")
+         ratios[a_s] = [round(float(r), 4) for r in diff]
+     ax.set_xticks(np.array(sorted(runs)) * CELL_UM)
+     ax.set_xticklabels([f"{c * CELL_UM:.0f}" for c in sorted(runs)])
+     ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+     ax.set_xlabel(r"tube length $L$ ($\mu$m)")
+     ax.set_ylabel(r"$E_b(N, L) - \Delta\Omega$ ($\hbar\omega_\perp$)")
+-    ax.set_title(r"(b) fixed $N$ minus fixed $\mu$", fontsize=9, loc="left")
+-    bx.legend(title=r"$a_s$ ($a_0$), also in (b)", fontsize=6, title_fontsize=6, frameon=False, loc="upper left")
++    title(ax, "(b)", r"fixed $N$ minus fixed $\mu$")
++    bx.legend(title=r"$a_s$ ($a_0$), also in (b)", fontsize=6, title_fontsize=6, loc="upper left")
+     bx.axhline(1, color="0.5", lw=0.6)
+     bx.set_xlim(0, 0.012)
+     bx.set_xlabel(r"$1/L$ ($\mu$m$^{-1}$), $L$ the shorter tube")
+-    bx.set_ylabel(r"$[E_b(L) - E_b(2L)]\,/\,[\Delta N^2/(4\kappa L)]$", fontsize=8)
+-    bx.set_title("(c) two lengths compared", fontsize=9, loc="left")
++    bx.set_ylabel(r"$[E_b(L) - E_b(2L)]\,/\,[\Delta N^2/(4\kappa L)]$", fontsize=7)
++    title(bx, "(c)", "two lengths compared")
+     dns = {r[0]: delta_n(r[1]) for r in BARRIERS}
+-    by_kind(cx, list(dns), [-v for v in dns.values()], [r[2] for r in BARRIERS], ms=3.5)
++    by_kind(cx, list(dns), [-v for v in dns.values()], [r[2] for r in BARRIERS])
+     window(cx)
+     cx.set_xlabel(r"$a_s$ ($a_0$)")
+     cx.set_ylabel(r"$-\Delta N$ (atoms expelled)")
+-    cx.set_title(r"(d) $\Delta N$ at fixed $\mu$", fontsize=9, loc="left")
++    title(cx, "(d)", r"$\Delta N$ at fixed $\mu$")
+     save(fig, out, "fig5_finite_tube")
+     return kappa, ratios, {k: round(v, 1) for k, v in dns.items()}
+ 
+@@ -572,44 +635,43 @@ def broken(x, *ys, gap=0.06):
+ 
+ 
+ def fig6(out):
+-    fig = plt.figure(figsize=(7.2, 4.8))
++    fig = plt.figure(figsize=(W2, 4.1))
+     gs = fig.add_gridspec(2, 2, height_ratios=[1.15, 2.0])
+     sx = schematic_axes(fig, gs[0, :], 14, 3.1)
+     sliding_schematic(sx)
+-    sx.set_title("(a) sliding the droplets inside the nucleus (schematic)", fontsize=9, loc="left")
++    title(sx, "(a)", "sliding the droplets inside the nucleus (schematic)")
+     ax, bx = fig.add_subplot(gs[1, 0]), fig.add_subplot(gs[1, 1])
+     for kind in ("gap", "droplet"):
+         m, col = STYLE[kind]
+         for runs, fixed_n in ((EIG_N[kind], True), (EIG_MU[kind], False)):
+             pts = sorted((a_of(r), *hessian(r)) for r in runs)
+             a, odd, even = broken([p[0] for p in pts], [1e3 * p[2][0] for p in pts], [1e2 * p[1][0] for p in pts])
+-            style = dict(color=col, mfc=col if fixed_n else "white", ms=4, lw=0.7, ls="-" if fixed_n else "none")
+-            ax.plot(a, odd, m, label=f"{kind} centred, fixed " + ("$N$" if fixed_n else r"$\mu$"), **style)
+-            bx.plot(a, even, m, **style)
++            style_ = dict(color=col, mfc=col if fixed_n else "white", ms=3.5, lw=0.7, ls="-" if fixed_n else "none")
++            ax.plot(a, odd, m, label=f"{kind} centred, fixed " + ("$N$" if fixed_n else r"$\mu$"), **style_)
++            bx.plot(a, even, m, **style_)
+     labelled = set()
+     for rid, kind in EIG_FULL:
+         m, col = STYLE[kind]
+         lam = hessian(rid)[1]
+         label = None if kind in labelled or kind == "gap" else f"{kind} (full space)"
+         labelled.add(kind)
+-        ax.plot(a_of(rid), 1e3 * lam[1], m, color=col, mfc="white", ms=5, mew=1.2, label=label)
+-        bx.plot(a_of(rid), 1e2 * lam[0], m, color=col, mfc="white", ms=5, mew=1.2)
++        ax.plot(a_of(rid), 1e3 * lam[1], m, color=col, mfc="white", ms=4.5, mew=1.0, label=label)
++        bx.plot(a_of(rid), 1e2 * lam[0], m, color=col, mfc="white", ms=4.5, mew=1.0)
+     for axis in (ax, bx):
+         axis.axhline(0, color="0.5", lw=0.6)
+         window(axis)
+         axis.set_xlabel(r"$a_s$ ($a_0$)")
+     ax.set_ylabel(r"sliding eigenvalue ($10^{-3}\,\hbar\omega_\perp$)")
+-    ax.set_title("(b) sliding mode (lowest odd)", fontsize=9, loc="left")
+-    ax.legend(fontsize=6, frameon=False, loc="lower left")
++    title(ax, "(b)", "sliding mode (lowest odd)")
++    ax.legend(fontsize=6, loc="lower left")
+     bx.set_ylabel(r"breathing eigenvalue ($10^{-2}\,\hbar\omega_\perp$)")
+-    bx.set_title("(c) growth mode (lowest even)", fontsize=9, loc="left")
++    title(bx, "(c)", "growth mode (lowest even)")
+     save(fig, out, "fig6_eigenvalues")
+ 
+ 
+ def fig7(out):
+-    from matplotlib.lines import Line2D
+     _, drive = coexistence()
+-    fig, (ax, bx) = plt.subplots(1, 2, figsize=(7.2, 3.3), gridspec_kw={"width_ratios": [1.3, 1]})
++    fig, (ax, bx) = plt.subplots(1, 2, figsize=(W2, 2.9), gridspec_kw={"width_ratios": [1.3, 1]})
+     colors = {90.272: "#d62728", 90.273: "#1f77b4"}
+     for a_s, states in STAIRS.items():
+         col = colors[a_s]
+@@ -629,20 +691,20 @@ def fig7(out):
+         ax.plot([-delta_n(r) for r in path], [barrier(r) for r in path], ":", color=col, lw=0.8)
+         for ref, kind in states:
+             m = {"saddle": "^", "minimum": "o", "other": "x"}[kind]
+-            ax.plot(-delta_n(ref), barrier(ref), m, color=col, ms=5, mfc=col if kind == "saddle" else "white")
++            ax.plot(-delta_n(ref), barrier(ref), m, color=col, ms=4, mfc=col if kind == "saddle" else "white")
+     ax.set_xlim(450, 1300)
+     ax.set_ylim(89.4, 92.7)
+     ax.set_xlabel(r"$-\Delta N$ (atoms expelled by the nucleus)")
+     ax.set_ylabel(r"$\Omega - \Omega_U$ ($\hbar\omega_\perp$)")
+-    ax.set_title("(a) growth path near the edge", fontsize=9, loc="left")
++    title(ax, "(a)", "growth path near the edge")
+     handles = [Line2D([], [], color=colors[a], lw=2, label=f"{a:g} $a_0$") for a in colors] + [
+-        Line2D([], [], marker="^", color="0.3", ls="none", label="saddle (index 1)"),
+-        Line2D([], [], marker="o", color="0.3", mfc="white", ls="none", label="minimum (index 0)"),
+-        Line2D([], [], marker="x", color="0.3", ls="none", label="other branch (index 1)"),
+-        Line2D([], [], color="0.3", alpha=0.6, label="descent from a saddle"),
+-        Line2D([], [], color="0.3", alpha=0.6, ls="--", label="its first 50 steps"),
+-        Line2D([], [], color="0.3", ls=":", label="order along the path")]
+-    ax.legend(handles=handles, fontsize=6, frameon=False, loc="lower left")
++        Line2D([], [], marker="^", color="0.3", ls="none", ms=4, label="saddle (index 1)"),
++        Line2D([], [], marker="o", color="0.3", mfc="white", ls="none", ms=4, label="minimum (index 0)"),
++        Line2D([], [], marker="x", color="0.3", ls="none", ms=4, label="other branch (index 1)"),
++        Line2D([], [], color="0.3", alpha=0.6, lw=0.8, label="descent from a saddle"),
++        Line2D([], [], color="0.3", alpha=0.6, lw=0.8, ls="--", label="its first 50 steps"),
++        Line2D([], [], color="0.3", lw=0.8, ls=":", label="order along the path")]
++    ax.legend(handles=handles, fontsize=6, loc="lower left")
+     Eb = {r[0]: barrier(r[1]) for r in BARRIERS}
+     kinds = {r[0]: r[2] for r in BARRIERS}
+     a = np.array(EDGE)
+@@ -651,27 +713,28 @@ def fig7(out):
+     by_kind(bx, w, deficit, [kinds[x] for x in a])
+     bx.errorbar(w[-1], deficit[-1], yerr=0.2, color=STYLE["second rung"][1], capsize=2, lw=0.8)  # RESULTS: +-0.2
+     for x, y, a_s in zip(w, deficit, a):
+-        bx.annotate(f"{a_s:g}", (x, y), xytext=(4, -3), textcoords="offset points", fontsize=5.5)
++        bx.annotate(f"{a_s:g}", (x, y), xytext=(5, 0), textcoords="offset points", va="center", fontsize=6)
++    bx.axhline(0, color="0.5", lw=0.6)
+     bx.set_xlim(0, 1.15 * w.max())
+-    bx.set_ylim(0, 1.15 * deficit.max())
++    bx.set_ylim(-1.0, 1.15 * deficit.max())               # with pinning the limit is 2 sigma + Delta P
+     bx.set_xlabel(r"drive $\Delta\omega$ ($\hbar\omega_\perp\,\mu$m$^{-1}$)")
+     bx.set_ylabel(r"$2\sigma - E_b$ ($\hbar\omega_\perp$)")
+-    bx.set_title("(b) deficit to the thin-wall limit", fontsize=9, loc="left")
+-    ins = bx.inset_axes([0.13, 0.58, 0.36, 0.36])
++    title(bx, "(b)", "deficit to the thin-wall limit")
++    ins = bx.inset_axes([0.12, 0.6, 0.33, 0.35])
+     ins.plot([s_ for s_, _ in SIGMA], [sigma(r) for _, r in SIGMA], "o-", ms=3, lw=0.8, color="#ff7f0e")
+-    ins.set_xlabel(r"$a_s$ ($a_0$)", fontsize=6)
+-    ins.set_ylabel(r"$\sigma$ ($\hbar\omega_\perp$)", fontsize=6)
+-    ins.tick_params(labelsize=5)
++    ins.set_xlabel(r"$a_s$ ($a_0$)", fontsize=6.5, labelpad=1)
++    ins.set_ylabel(r"$\sigma$ ($\hbar\omega_\perp$)", fontsize=6.5, labelpad=1)
++    ins.tick_params(labelsize=6)
+     save(fig, out, "fig7_edge")
+     return {float(x): (round(float(v), 3), round(float(d), 3)) for x, v, d in zip(a, w, deficit)}
+ 
+ 
+ def fig8(out):
+-    fig = plt.figure(figsize=(7.2, 4.7))
++    fig = plt.figure(figsize=(W2, 4.0))
+     gs = fig.add_gridspec(2, 3, height_ratios=[1.15, 2.0], width_ratios=[1.4, 1, 1])
+     sx = schematic_axes(fig, gs[0, :], 14, 3.1)
+     rolling_schematic(sx)
+-    sx.set_title("(a) the saddle nudged both ways (schematic)", fontsize=9, loc="left")
++    title(sx, "(a)", "the saddle nudged both ways (schematic)")
+     axs = [fig.add_subplot(gs[1, k]) for k in range(3)]
+     colors = plt.get_cmap("viridis")(np.linspace(0, 0.85, len(CONNECT)))
+     final = {}
+@@ -681,37 +744,39 @@ def fig8(out):
+             tr = [t for t in c["sides"][side]["trace"] if t["iteration"] > 0]
+             it = np.array([t["iteration"] for t in tr])
+             drop = c["barrier"] - np.array([t["omega_minus_uniform"] for t in tr])
+-            axs[0].loglog(it, np.clip(drop, 1e-5, None), ls, color=col, lw=1,
++            axs[0].loglog(it, np.clip(drop, 1e-5, None), ls, color=col,
+                           label=f"{a_s:g} $a_0$" if side == "grow" else None)
+             if side == "grow":
+-                axs[1].loglog(it, [-t["N_minus_uniform"] for t in tr], ls, color=col, lw=1)
++                axs[1].loglog(it, [-t["N_minus_uniform"] for t in tr], ls, color=col)
+             else:
+-                axs[2].semilogx(it, [t["contrast"] for t in tr], ls, color=col, lw=1)
++                axs[2].semilogx(it, [t["contrast"] for t in tr], ls, color=col)
+             final[f"{a_s:g} {side}"] = (int(it[-1]), round(float(drop[-1]), 4))
+         axs[0].axhline(c["barrier"], color=col, ls=":", lw=0.6)
+-    from matplotlib.lines import Line2D
+     handles, _ = axs[0].get_legend_handles_labels()
+     handles += [Line2D([], [], color="0.3", ls="--", label="shrinking side"),
+                 Line2D([], [], color="0.3", label="growing side"),
+-                Line2D([], [], color="0.3", ls=":", label=r"$E_b$")]
++                Line2D([], [], color="0.3", ls=":", lw=0.6, label=r"$E_b$")]
+     axs[0].set_xlabel("descent iteration")
+     axs[0].set_ylabel(r"$\Omega_s - \Omega$ ($\hbar\omega_\perp$)")
+-    axs[0].set_title("(b) energy released", fontsize=9, loc="left")
++    title(axs[0], "(b)", "energy released")
+     axs[0].set_ylim(1e-2, 3e5)                         # room for the legend above the curves
+-    axs[0].legend(handles=handles, fontsize=5.5, frameon=False, loc="upper left", ncol=2)
++    axs[0].legend(handles=handles, fontsize=6, loc="upper left", ncol=2, columnspacing=1.0)
+     axs[1].set_xlabel("descent iteration")
+     axs[1].set_ylabel(r"$-\Delta N$ (atoms expelled)")
+-    axs[1].set_title("(c) growing side: nucleus size", fontsize=9, loc="left")
++    title(axs[1], "(c)", "growing side: nucleus size")
+     axs[2].set_xlabel("descent iteration")
+     axs[2].set_ylabel("peak contrast")
+-    axs[2].set_title("(d) shrinking side", fontsize=9, loc="left")
++    title(axs[2], "(d)", "shrinking side")
+     save(fig, out, "fig8_connectivity")
+     return final
+ 
+ 
++FIGS = "1,2,3,4,5,6,7,8"
++
++
+ def main():
+     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+-    ap.add_argument("--figs", type=str, default="1,2,3,4,5,6,7,8")
++    ap.add_argument("--figs", type=str, default=FIGS)
+     ap.add_argument("--out", type=Path, default=ROOT / "paper" / "C3a" / "figures")
+     args = ap.parse_args()
+     args.out.mkdir(parents=True, exist_ok=True)
+@@ -720,6 +785,7 @@ def main():
+               "newton_90": NEWTON_90, "nucleus": NUCLEUS, "shapes": SHAPES, "finite_L": FINITE_L, "eig_N": EIG_N,
+               "eig_mu": EIG_MU, "eig_full": EIG_FULL, "stairs": STAIRS, "traces": TRACES, "edge": EDGE,
+               "connect": CONNECT, "coexistence": COEX, "a_rot": A_ROT, "window": WINDOW}
++    style()
+     with dipgpe.runs.Run("c3a_figures", params) as run:       # figures and the numbers they show, recorded
+         out = [run.dir, args.out]
+         res = {}
+@@ -750,6 +816,10 @@ def main():
+         if "8" in figs:
+             res["descents_last_iteration_energy_released"] = fig8(out)
+             print("descents (a_s side: last iteration, energy released):", res["descents_last_iteration_energy_released"])
++        if set(figs) == set(FIGS.split(",")):
++            write_sources(out, run.dir)
++        else:
++            print("SOURCES.txt not rewritten: only some figures were drawn")
+         run.result(**res)
+     print("wrote", args.out)
+ 

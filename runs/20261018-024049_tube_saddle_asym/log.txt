@@ -1,0 +1,5 @@
+[dipgpe.runs] recording to C:\Users\kyost\Desktop\git\qs\runs\20261018-024049_tube_saddle_asym
+  a = 0.0200 (x norm), beta = -1.2485e-03, residual 2.3e-10, converged True  (17 s)
+  a = 0.0500 (x norm), beta = -5.2736e-04, residual 2.6e-11, converged True  (43 s)
+  a = 0.1000 (x norm), beta = +4.0124e-02, residual 1.3e-03, converged False  (110 s)
+converged False, a = None, barrier nan hbar omega, delta_N = nan, residual None, full residual None, multiplier None, odd part 8.827e-03, peak 3.0 GiB

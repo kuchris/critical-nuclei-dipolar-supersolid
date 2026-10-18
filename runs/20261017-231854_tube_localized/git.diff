@@ -1,0 +1,114 @@
+diff --git a/src/dipgpe/bdg.py b/src/dipgpe/bdg.py
+index e415e93..8050725 100644
+--- a/src/dipgpe/bdg.py
++++ b/src/dipgpe/bdg.py
+@@ -178,7 +178,7 @@ def bogoliubov(model, psi0, q=0.0, n_modes=6, axis=-1, tol=1e-6, max_iter=1000,
+ 
+ 
+ def constrained_hessian(model, psi0, n_modes=3, tol=1e-6, max_iter=1000, block=None, seed=0, deflate=None,
+-                        x0=None, sector=None, verbose=False):
++                        x0=None, sector=None, mu=None, verbose=False):
+     """Lowest eigenvalues of the energy Hessian at a real stationary state psi0 on
+     the tangent space of the sphere ||psi||^2 = N, for real (amplitude) perturbations.
+ 
+@@ -191,11 +191,17 @@ def constrained_hessian(model, psi0, n_modes=3, tol=1e-6, max_iter=1000, block=N
+     box). ``x0`` (fields) warm-starts the block, e.g. the path tangent at a saddle.
+     ``sector`` (a linear projection commuting with M, e.g. onto fields even in z)
+     restricts the problem to that symmetry sector.
++    With ``mu`` (grand canonical, psi0 from ``refine_saddle(..., mu=mu)``) the
++    Hessian of E - mu N on all real perturbations, psi0 included. Along a branch of
++    stationary states M dpsi/dmu = psi0, so the two indices differ by one exactly
++    when dN/dmu < 0 (Vakhitov-Kolokolov).
+     Returns (eigenvalues (float64, ascending), modes, info) with info =
+     {"iterations", "residual", "mu"}; ``tol`` bounds the relative residual.
+     """
+     op = Bogoliubov(model, psi0)
+-    _add_deflation(op, [op.psi0] + list(deflate or []))
++    if mu is not None:
++        op.mu = mu
++    _add_deflation(op, ([op.psi0] if mu is None else []) + list(deflate or []))
+     if sector is not None:
+         project = op.project
+         op.project = lambda f: project(sector(f))
+diff --git a/src/dipgpe/mep.py b/src/dipgpe/mep.py
+index b80368f..016d4ff 100644
+--- a/src/dipgpe/mep.py
++++ b/src/dipgpe/mep.py
+@@ -355,13 +355,20 @@ def _minres(apply_A, apply_Minv, b, inner, tol, max_iter):
+     return x, itn, phibar / beta1
+ 
+ 
+-def refine_saddle(model, psi, *, tol=None, linear_tol=1e-2, max_newton=30, max_linear=5000, deflate=None, t=0.0,
+-                  sector=None, strict=True, callback=None):
++def refine_saddle(model, psi, *, mu=None, tol=None, linear_tol=1e-2, max_newton=30, max_linear=5000, deflate=None,
++                  t=0.0, sector=None, strict=True, callback=None):
+     """Stationary state near ``psi`` (real; its norm is kept) by Newton's method on
+     the sphere, for any Morse index: e.g. the saddle point from
+     :func:`string_method`, whose climbing image converges only at the rate of the
+     softest mode.
+ 
++    With ``mu`` the chemical potential is fixed instead of the norm (grand
++    canonical): Newton solves H psi = mu psi, a stationary point of E - mu N on all
++    real fields, with no projection off psi and no renormalization. This is the
++    saddle of a nucleus exchanging atoms with an unbounded background at mu, i.e.
++    the L -> infinity limit of the fixed-N tube without its depletion term
++    (ISSUES C3-13). info["N"] is the norm of the result.
++
+     Each step solves P M P delta = -(H psi - mu psi) on the tangent space, with M
+     the Hessian of E - mu N for real perturbations (:class:`dipgpe.bdg.Bogoliubov`,
+     the operator M = L + 2X at the current psi) and P the projection off psi
+@@ -383,7 +390,7 @@ def refine_saddle(model, psi, *, tol=None, linear_tol=1e-2, max_newton=30, max_l
+     (ISSUES C3-10). ``callback(step, psi, residual)`` is called after every Newton
+     step. Check the Morse index with :func:`dipgpe.bdg.constrained_hessian`.
+ 
+-    Returns (psi, info): info = {"iterations", "residual", "energy", "mu",
++    Returns (psi, info): info = {"iterations", "residual", "energy", "mu", "N",
+     "residuals" (per Newton step), "linear_iterations", "linear_tolerances", "converged",
+     "stalled"}. If not
+     converged within ``max_newton`` steps, raises RuntimeError, or returns the
+@@ -396,18 +403,21 @@ def refine_saddle(model, psi, *, tol=None, linear_tol=1e-2, max_newton=30, max_l
+     psi = space.real(psi)
+     N = float(space.inner(psi[None], psi[None])[0])
+     ip = lambda a, b: float(_inner(grid, a, b))          # noqa: E731
++    fixed_mu = mu
+     if sector is not None:
+         psi = space.real(sector(psi))
+-        psi = psi * math.sqrt(N / ip(psi, psi))
++        if fixed_mu is None:
++            psi = psi * math.sqrt(N / ip(psi, psi))
+ 
+     def state(f):
+         E, h = space.energy_gradient(f[None])
+-        mu = ip(f, h[0]) / N
+-        r = h[0] - mu * f
+-        return float(E[0]), mu, r, math.sqrt(ip(r, r) / N)
++        n = N if fixed_mu is None else ip(f, f)
++        m = ip(f, h[0]) / n if fixed_mu is None else fixed_mu
++        r = h[0] - m * f
++        return float(E[0]), m, r, math.sqrt(ip(r, r) / n)
+ 
+     def renormalized(f):
+-        return f * math.sqrt(N / ip(f, f))
++        return f * math.sqrt(N / ip(f, f)) if fixed_mu is None else f
+ 
+     E, mu, r, res = state(psi)
+     residuals, linear, etas = [res], [], []
+@@ -417,7 +427,9 @@ def refine_saddle(model, psi, *, tol=None, linear_tol=1e-2, max_newton=30, max_l
+         if res <= tol or k == max_newton:
+             break
+         op = Bogoliubov(model, psi, t=t)
+-        _add_deflation(op, [psi] + list(deflate or []))
++        if fixed_mu is not None:
++            op.mu = fixed_mu
++        _add_deflation(op, ([psi] if fixed_mu is None else []) + list(deflate or []))
+         if sector is not None:
+             project = op.project
+             op.project = lambda f, project=project: project(sector(f))
+@@ -450,6 +462,6 @@ def refine_saddle(model, psi, *, tol=None, linear_tol=1e-2, max_newton=30, max_l
+     if not converged and strict:
+         raise RuntimeError(f"refine_saddle: residual {res:.3g} > tol {tol:g} after {len(residuals) - 1} Newton "
+                            f"steps{' (stalled)' if stalled else ''}")
+-    return psi, {"iterations": len(residuals) - 1, "residual": res, "energy": E, "mu": mu,
++    return psi, {"iterations": len(residuals) - 1, "residual": res, "energy": E, "mu": mu, "N": ip(psi, psi),
+                  "residuals": residuals, "linear_iterations": linear, "linear_tolerances": etas,
+                  "converged": converged, "stalled": stalled}

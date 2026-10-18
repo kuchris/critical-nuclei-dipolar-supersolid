@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Simulation output (never committed)
+results/
+*.npz
+*.npy
+*.h5
+*.hdf5
+
+# Run records (dipgpe.runs): metadata, results, logs and figures are committed;
+# large outputs and viewer frames stay local and go to the backup
+runs/*/data/
+runs/*/live/frames/
+
+# Reduced public data set for paper C3a (tools/export_c3a_data.py; from Zenodo)
+data_C3a/
+data_C3a.zip

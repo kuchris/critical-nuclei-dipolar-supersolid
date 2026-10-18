@@ -1,0 +1,8 @@
+[dipgpe.runs] recording to C:\Users\kyost\Desktop\git\qs\runs\20261018-045028_tube_saddle_connect
+saddle 20261018-040000_tube_saddle_refine: barrier 32.5659 hbar omega, FWHM 11.2 um, contrast 0.428, even sector
+  shrink 0: Omega - Omega_U = 32.3223, FWHM 11.2 um, contrast 0.407, residual 2.5e-04  (0 s)
+  shrink 500: Omega - Omega_U = 4.2873, FWHM 18.7 um, contrast 0.094, residual 5.7e-04  (10 s)
+  shrink: reached after 950 iterations, Omega - Omega_U = 0.0189  (20 s)
+  grow 0: Omega - Omega_U = 32.3147, FWHM 11.2 um, contrast 0.450, residual 2.5e-04  (0 s)
+  grow 500: Omega - Omega_U = -56.9664, FWHM 13.8 um, contrast 0.732, residual 1.8e-03  (10 s)
+  grow: reached after 800 iterations, Omega - Omega_U = -167.0155  (17 s)

@@ -1,0 +1,9 @@
+{
+ "barrier": NaN,
+ "delta_N": NaN,
+ "converged": false,
+ "a": null,
+ "odd_part": 0.00819726323616422,
+ "residual": null,
+ "seconds": 541.3363749980927
+}

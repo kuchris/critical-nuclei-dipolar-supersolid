@@ -1,0 +1,10 @@
+[dipgpe.runs] recording to C:\Users\kyost\Desktop\git\qs\runs\20261017-205029_tube_saddle_pilot
+  it      0      0.2 s  normal 1.056e-03  saddle None  residual None  max(E - E0) 32.8886
+  it    400     64.9 s  normal 7.431e-05  saddle 3  residual 0.00046178060325157035  max(E - E0) 24.8094
+  it    800    129.6 s  normal 6.834e-05  saddle 3  residual 0.0003886084102817199  max(E - E0) 24.7502
+  it   1200    194.3 s  normal 5.986e-05  saddle 3  residual 0.00033269698576198213  max(E - E0) 24.0790
+  it   1600    259.1 s  normal 5.067e-05  saddle 3  residual 0.0002875678733363436  max(E - E0) 23.8778
+  it   2000    323.9 s  normal 4.716e-05  saddle 3  residual 0.00024914675383236817  max(E - E0) 23.6857
+  it   2400    388.6 s  normal 5.970e-05  saddle 3  residual 0.00021551964690345426  max(E - E0) 22.8245
+  it   2800    454.9 s  normal 6.831e-05  saddle 3  residual 0.00018579008753934282  max(E - E0) 22.8468
+  it   3200    522.0 s  normal 8.402e-05  saddle 3  residual 0.00015968523246591456  max(E - E0) 22.9223

@@ -1,0 +1,416 @@
+diff --git a/benchmarks/tube_saddle.py b/benchmarks/tube_saddle.py
+index ee8c5bb..4e75444 100644
+--- a/benchmarks/tube_saddle.py
++++ b/benchmarks/tube_saddle.py
+@@ -15,6 +15,9 @@ Modes
+   pilot  the string at one a_s within a time budget: convergence history
+          (normal gradient, climbing residual, image energies), the line
+          densities of the last string, and the string itself (data/).
++  summary table and figure of refine runs (``--runs``): barrier, Morse index,
++         nucleus length (full width at half maximum of the one-cell contrast),
++         peak contrast, droplets and background depletion; no GPU.
+   hessian lowest Hessian eigenvalues of a refined saddle (``--from-run`` a refine
+          run) in the even and odd sectors of z -> -z (translation deflated in the odd
+          one), with the parity of each mode.
+@@ -136,7 +139,8 @@ def pilot(args, run):
+               f"saddle {info['saddle']}  residual {info['residual']}  max(E - E0) {max(rel):.4f}", flush=True)
+         return time.time() - t0 > 60 * args.minutes
+     X, info = string_method(space, X0, step=args.step, max_iter=10 ** 9, strict=False, callback=log,
+-                            callback_every=args.every, climb_tol=args.climb_tol)
++                            callback_every=args.every, climb_tol=args.climb_tol,
++                            sector=lambda f: 0.5 * (f + mirror(f)))
+     line = ((X.abs() ** 2).sum((1, 2)) * grid.dx[0] * grid.dx[1]).double().cpu()
+     E = info["energies"]
+     torch.save(X.cpu(), run.data("string.pt"))
+@@ -185,22 +189,46 @@ def start_state(args, grid, psi_U):
+         folder.name, image
+ 
+ 
+-def parity_index(model, grid, psi, tol, iters):
++def _embed_z(f, nz):
++    """Fields (leading axes kept) zero-padded symmetrically along z to nz points."""
++    extra = nz - f.shape[-1]
++    if extra == 0:
++        return f
++    pad = torch.zeros(*f.shape[:-1], extra // 2, dtype=f.dtype, device=f.device)
++    return torch.cat([pad, f, pad], dim=-1)
++
++
++def stored_modes(folder, grid):
++    """Hessian modes saved by an earlier refine or hessian run, embedded in this tube."""
++    f = folder / "data" / "hessian_modes.pt"
++    if not f.exists():
++        return None
++    modes = torch.load(f)
++    return {k: _embed_z(v.to("cuda", torch.complex128), grid.shape[2]) for k, v in modes.items()}
++
++
++def parity_index(model, grid, psi, tol, iters, x0=None, save=None):
+     """Lowest Hessian eigenvalues in the even (two) and odd (one, translation deflated)
+-    sectors of z -> -z, with the parity of each mode."""
++    sectors of z -> -z, with the parity of each mode; ``x0`` (dict per sector) warm-starts
++    from the modes of a nearby saddle, ``save`` (path) stores this run's modes."""
+     dz = grid.ifft(1j * grid.k[2] * grid.fft(psi))
+-    rows = {}
++    rows, keep = {}, {}
+     for name, sign, n in (("even", 1.0, 2), ("odd", -1.0, 1)):
+         t0 = time.time()
+         sector = lambda f, s=sign: 0.5 * (f + s * mirror(f))      # noqa: E731
+         lam, modes, info = constrained_hessian(model, psi, n_modes=n, deflate=[dz] if sign < 0 else None,
+-                                               tol=tol, max_iter=iters, sector=sector)
++                                               tol=tol, max_iter=iters, sector=sector,
++                                               x0=None if x0 is None else x0.get(name))
++        keep[name] = modes.to(torch.complex64).cpu()
+         parity = [float((m - mirror(m)).abs().norm() / (m + mirror(m)).abs().norm().clamp_min(1e-300)) for m in modes]
+         rows[name] = {"eigenvalues": lam.tolist(), "residuals": info["residual"], "iterations": info["iterations"],
+                       "odd_over_even_norm": parity, "seconds": time.time() - t0}
+         print(f"  Hessian {name}: {lam.tolist()} residuals {info['residual']} "
+               f"({info['iterations']} it, {time.time() - t0:.0f} s)", flush=True)
+     rows["index"] = sum(v < 0 for v in rows["even"]["eigenvalues"]) + sum(v < 0 for v in rows["odd"]["eigenvalues"])
++    rows["certified"] = all(r < 1 for k in ("even", "odd") for r in rows[k]["residuals"])
++    if save is not None:
++        torch.save(keep, save)
+     return rows
+ 
+ 
+@@ -208,9 +236,9 @@ def refine(args, run):
+     L, Np, psi_U, psi_M, cells = endpoints(args)
+     grid, model = tube(args, L, Np, DTYPES[args.dtypes])
+     psi0, source, image = start_state(args, grid, psi_U)
++    warm = stored_modes(next(dipgpe.runs.runs_dir().glob((args.modes_from or args.from_run) + "*")), grid)
+     N = float(args.density * PER_L * args.cells * L)
+     E_U = float(dipgpe.energy(model, dipgpe.normalize(grid, psi_U.repeat(1, 1, args.cells).to(grid.dtype), N)))
+-    dz = grid.ifft(1j * grid.k[2] * grid.fft(psi0))
+     t0 = time.time()
+     steps = []
+ 
+@@ -218,7 +246,9 @@ def refine(args, run):
+         steps.append({"step": k, "seconds": time.time() - t0, "residual": res})
+         print(f"  Newton {k}: residual {res:.3e}  ({time.time() - t0:.0f} s)", flush=True)
+     torch.cuda.reset_peak_memory_stats()
+-    psi, info = refine_saddle(model, psi0, max_newton=args.max_newton, deflate=[dz], strict=False, callback=log)
++    even = lambda f: 0.5 * (f + mirror(f))                       # noqa: E731
++    odd_start = float((psi0 - mirror(psi0)).abs().norm() / psi0.abs().norm())
++    psi, info = refine_saddle(model, psi0, max_newton=args.max_newton, strict=False, callback=log, sector=even)
+     barrier = info["energy"] - E_U
+     print(f"barrier E - E_uniform = {barrier:.6f} hbar omega, residual {info['residual']:.2e}, "
+           f"MINRES {info['linear_iterations']}{', stalled' if info['stalled'] else ''}, "
+@@ -226,6 +256,7 @@ def refine(args, run):
+     line = ((psi.abs() ** 2).sum((0, 1)) * grid.dx[0] * grid.dx[1]).double().cpu()
+     torch.save(psi.cpu(), run.data("saddle.pt"))
+     out = {"cells": cells, "N": N, "from_run": source, "image": image, "E_uniform": E_U,
++           "odd_part_of_start": odd_start, "odd_part": float((psi - mirror(psi)).abs().norm() / psi.abs().norm()),
+            "E_saddle": info["energy"], "barrier": barrier, "residuals": info["residuals"],
+            "linear_iterations": info["linear_iterations"], "steps": steps, "converged": info["converged"],
+            "stalled": info["stalled"], "newton_seconds": time.time() - t0,
+@@ -236,10 +267,12 @@ def refine(args, run):
+                newton_steps=info["iterations"], minres=info["linear_iterations"], seconds=time.time() - t0)
+     if args.hessian:
+         torch.cuda.reset_peak_memory_stats()
+-        rows = parity_index(model, grid, psi, args.hessian_tol, args.hessian_iter)
++        rows = parity_index(model, grid, psi, args.hessian_tol, args.hessian_iter, x0=warm,
++                            save=run.data("hessian_modes.pt"))
+         out.update(hessian=rows, hessian_peak_GiB=torch.cuda.max_memory_allocated() / 2 ** 30)
+         run.save_json("tube_saddle_refine.json", out)
+-        run.result(index=rows["index"], even=rows["even"]["eigenvalues"], odd=rows["odd"]["eigenvalues"])
++        run.result(index=rows["index"], certified=rows["certified"], even=rows["even"]["eigenvalues"],
++                   odd=rows["odd"]["eigenvalues"])
+ 
+ 
+ def hessian(args, run):
+@@ -248,17 +281,95 @@ def hessian(args, run):
+     folder = next(dipgpe.runs.runs_dir().glob(args.from_run + "*"))
+     psi = torch.load(folder / "data" / "saddle.pt").to("cuda", grid.dtype)
+     torch.cuda.reset_peak_memory_stats()
+-    rows = parity_index(model, grid, psi, args.hessian_tol, args.hessian_iter)
++    rows = parity_index(model, grid, psi, args.hessian_tol, args.hessian_iter, x0=stored_modes(folder, grid),
++                        save=run.data("hessian_modes.pt"))
+     rows["peak_GiB"] = torch.cuda.max_memory_allocated() / 2 ** 30
+     print(f"  index {rows['index']}, peak {rows['peak_GiB']:.1f} GiB", flush=True)
+     run.save_json("tube_saddle_hessian.json", {"from_run": folder.name, **rows})
+-    run.result(index=rows["index"], even=rows["even"]["eigenvalues"], odd=rows["odd"]["eigenvalues"])
++    run.result(index=rows["index"], certified=rows["certified"], even=rows["even"]["eigenvalues"],
++               odd=rows["odd"]["eigenvalues"])
++
++
++def _index_of(folder):
++    """Morse index of a refine run: its own Hessian, or a hessian run made from it."""
++    import json
++    out = json.loads((folder / "tube_saddle_refine.json").read_text(encoding="utf-8"))
++    h = out.get("hessian")
++    if isinstance(h, dict):
++        return h["index"], h
++    for hf in sorted(dipgpe.runs.runs_dir().glob("*_tube_saddle_hessian/tube_saddle_hessian.json")):
++        hj = json.loads(hf.read_text(encoding="utf-8"))
++        if hj.get("from_run") == folder.name and "even" in hj:
++            even, odd = hj["even"]["eigenvalues"], hj["odd"]["eigenvalues"]
++            return sum(v < 0 for v in even) + sum(v < 0 for v in odd), hj
++    return None, None
++
++
++def nucleus(line, dz, nz_cell, density):
++    """Geometry of a nucleus centred at z = 0 from the line density (atoms per micron)."""
++    import numpy as np
++    n = np.asarray(line)
++    h = nz_cell // 2
++    ext = np.concatenate([n[-h:], n, n[:h]])
++    win = np.lib.stride_tricks.sliding_window_view(ext, 2 * h + 1)
++    C = (win.max(1) - win.min(1)) / (win.max(1) + win.min(1))
++    q = n.size // 4
++    background = float(np.concatenate([n[:q // 2], n[-q // 2:]]).mean())
++    half = C >= 0.5 * C.max()
++    top = background + 0.5 * (n.max() - background)
++    peaks = int(((n > np.roll(n, 1)) & (n >= np.roll(n, -1)) & (n > top)).sum())
++    return {"contrast": float(C.max()), "fwhm_um": float(half.sum() * dz), "droplets": peaks,
++            "background_minus_mean": background - density}
++
++
++def summary(args, run):
++    import json
++    import matplotlib
++    matplotlib.use("Agg")
++    import matplotlib.pyplot as plt
++    rows = []
++    for rid in args.runs.split(","):
++        folder = next(dipgpe.runs.runs_dir().glob(rid + "*"))
++        meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
++        prm = meta.get("params") or meta.get("parameters")
++        out = json.loads((folder / "tube_saddle_refine.json").read_text(encoding="utf-8"))
++        index, _ = _index_of(folder)
++        geo = nucleus(out["line_density_per_um"], out["dz_um"], prm["nz_cell"], prm["density"])
++        rows.append({"run": folder.name, "a_s": prm["a"], "cells": prm["cells"], "dx": prm["dx"],
++                     "L_perp": prm["L_perp"], "barrier": out["barrier"], "residual": out["residuals"][-1],
++                     "index": index, **geo, "line": out["line_density_per_um"], "dz_um": out["dz_um"]})
++    rows.sort(key=lambda r: (r["cells"], r["a_s"]))
++    print(f"{'a_s':>7} {'cells':>5} {'barrier':>10} {'index':>5} {'contrast':>8} {'FWHM um':>8} {'drops':>5} "
++          f"{'bg-n /um':>8} {'residual':>9}")
++    for r in rows:
++        print(f"{r['a_s']:7.3f} {r['cells']:5d} {r['barrier']:10.4f} {str(r['index']):>5} {r['contrast']:8.3f} "
++              f"{r['fwhm_um']:8.1f} {r['droplets']:5d} {r['background_minus_mean']:8.2f} {r['residual']:9.1e}")
++    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
++    for cells in sorted({r["cells"] for r in rows}):
++        sel = [r for r in rows if r["cells"] == cells]
++        ax1.plot([r["a_s"] for r in sel], [r["barrier"] for r in sel], "o-", label=f"{cells} cells")
++    ax1.axvline(89.83, ls=":", c="gray")
++    ax1.set_xlabel("a_s (a0)")
++    ax1.set_ylabel("E_saddle - E_uniform (hbar omega)")
++    ax1.legend()
++    for k, r in enumerate([r for r in rows if r["cells"] == min(x["cells"] for x in rows)]):
++        import numpy as np
++        z = (np.arange(len(r["line"])) - len(r["line"]) // 2) * r["dz_um"]
++        ax2.plot(z, np.asarray(r["line"]) + 4000 * k, lw=0.8, label=f"{r['a_s']:.2f}")
++    ax2.set_xlabel("z (um)")
++    ax2.set_ylabel("line density (1/um), offset")
++    ax2.legend(fontsize=7)
++    fig.tight_layout()
++    fig.savefig(run.file("tube_saddle_summary.png"), dpi=150)
++    run.save_json("tube_saddle_summary.json", [{k: v for k, v in r.items() if k != "line"} for r in rows])
++    run.result(rows=[{k: r[k] for k in ("a_s", "cells", "barrier", "index", "fwhm_um", "contrast")} for r in rows])
+ 
+ 
+ def main():
+     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+-    ap.add_argument("mode", choices=["cost", "pilot", "refine", "hessian"])
+-    ap.add_argument("--a", type=float, required=True, help="scattering length (a0)")
++    ap.add_argument("mode", choices=["cost", "pilot", "refine", "hessian", "summary"])
++    ap.add_argument("--runs", type=str, default="", help="summary: comma-separated refine run ids")
++    ap.add_argument("--a", type=float, default=None, help="scattering length (a0); required except for summary")
+     ap.add_argument("--density", type=float, default=6250.0, help="mean density (atoms per micron)")
+     ap.add_argument("--cells", type=int, default=32, help="tube length in crystal cells")
+     ap.add_argument("--cell-um", type=float, default=2.76)
+@@ -276,6 +387,8 @@ def main():
+     ap.add_argument("--image", type=int, default=None, help="refine: image of a stored string (default: its "
+                     "saddle); a refine run as --from-run gives its saddle (continuation in a_s, embedding in L)")
+     ap.add_argument("--max-newton", type=int, default=8, help="refine: Newton steps")
++    ap.add_argument("--modes-from", type=str, default=None, help="refine: run whose Hessian modes warm-start the "
++                    "index (default: --from-run)")
+     ap.add_argument("--hessian", action="store_true", help="refine: lowest two Hessian eigenvalues (Morse index)")
+     ap.add_argument("--hessian-tol", type=float, default=1e-3)
+     ap.add_argument("--hessian-iter", type=int, default=300)
+@@ -285,8 +398,10 @@ def main():
+     args = ap.parse_args()
+     if args.patch % 2:
+         raise SystemExit("--patch must be even (patch centred at z = 0)")
++    if args.a is None and args.mode != "summary":
++        raise SystemExit("--a is required")
+     with dipgpe.runs.Run(f"tube_saddle_{args.mode}", vars(args)) as run:
+-        {"cost": cost, "pilot": pilot, "refine": refine, "hessian": hessian}[args.mode](args, run)
++        {"cost": cost, "pilot": pilot, "refine": refine, "hessian": hessian, "summary": summary}[args.mode](args, run)
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/src/dipgpe/mep.py b/src/dipgpe/mep.py
+index 7e89b9d..b80368f 100644
+--- a/src/dipgpe/mep.py
++++ b/src/dipgpe/mep.py
+@@ -220,7 +220,7 @@ def path_through(space, states, n_images):
+ 
+ 
+ def string_method(space, images, *, step=0.5, tol=None, residual_tol=None, climb=True, climb_tol=1e-2,
+-                  fixed_ends=True, max_iter=100_000, callback=None, callback_every=100, strict=True):
++                  fixed_ends=True, sector=None, max_iter=100_000, callback=None, callback_every=100, strict=True):
+     """Minimum energy path through ``images`` (leading axis; the first and last
+     should be minima) and, with ``climb``, the saddle point on it.
+ 
+@@ -233,7 +233,9 @@ def string_method(space, images, *, step=0.5, tol=None, residual_tol=None, climb
+     :func:`dipgpe.ground_state` tolerance for fields, 1e-9 otherwise).
+     Climbing starts when the normal part falls below ``climb_tol``; the
+     climbing image is the highest interior image at that moment. ``fixed_ends``
+-    keeps the end images; otherwise they relax to their minima.
++    keeps the end images; otherwise they relax to their minima. ``sector`` (a
++    linear projection commuting with the energy, e.g. onto fields even in z) is
++    applied to the images at the start and after every update.
+     ``callback(iteration, images, info)`` is called every ``callback_every``
+     iterations; if it returns True the iteration stops there (info["stopped"]
+     True, not converged), e.g. at a time budget.
+@@ -245,7 +247,7 @@ def string_method(space, images, *, step=0.5, tol=None, residual_tol=None, climb
+     "converged", "stopped"}. If not converged within ``max_iter``, raises
+     RuntimeError, or returns with converged False when ``strict`` is False.
+     """
+-    X = space.real(images)
++    X = space.real(images if sector is None else sector(images))
+     n = X.shape[0]
+     N = space.inner(X[:1], X[:1])
+     X = X * _scale(space, X, N)
+@@ -288,6 +290,8 @@ def string_method(space, images, *, step=0.5, tol=None, residual_tol=None, climb
+             coef = space.inner(r[i], t[i]) / metric(t[i], i)
+             d[i] = g[i] - 2 * _expand_images(coef, t[i]) * t[i]
+         Y = X - step * d
++        if sector is not None:
++            Y = space.real(sector(Y))
+         Y = Y * _scale(space, Y, N)
+         s = _arc(space, Y)
+         W = _spline_weights(s, _targets(s, c))
+@@ -352,7 +356,7 @@ def _minres(apply_A, apply_Minv, b, inner, tol, max_iter):
+ 
+ 
+ def refine_saddle(model, psi, *, tol=None, linear_tol=1e-2, max_newton=30, max_linear=5000, deflate=None, t=0.0,
+-                  strict=True, callback=None):
++                  sector=None, strict=True, callback=None):
+     """Stationary state near ``psi`` (real; its norm is kept) by Newton's method on
+     the sphere, for any Morse index: e.g. the saddle point from
+     :func:`string_method`, whose climbing image converges only at the rate of the
+@@ -366,16 +370,22 @@ def refine_saddle(model, psi, *, tol=None, linear_tol=1e-2, max_newton=30, max_l
+     preconditioner (|k|^2/2 + max(|mu|, 1))^-1, to relative accuracy ``linear_tol``
+     (inexact Newton: the residual falls by about that factor per step once the
+     quadratic term is small). psi + delta is renormalized; if the residual did not
+-    fall the step is halved; if it still does not fall at 1/64, or a step lowers it
+-    by less than half (a floor, e.g. ~1e-8 in the 3D tube), the iteration stops at
+-    the best state (info["stalled"]). Stops when the residual
++    fall the step is halved (down to 1/64). If a step fails, or lowers the residual
++    by less than half, the linear tolerance is tightened 100-fold (down to 1e-8; in
++    the 3D tube a 1e-2 solve left floors of 1e-8 to 1e-6, ISSUES C3-9); if that does
++    not help either, the iteration stops at the best state (info["stalled"]).
++    Stops when the residual
+     ||H psi - mu psi|| / ||psi|| is below ``tol`` (default as
+-    :func:`dipgpe.ground_state`). ``callback(step, psi, residual)`` is called
+-    after every Newton step. Check the Morse index with
+-    :func:`dipgpe.bdg.constrained_hessian`.
++    :func:`dipgpe.ground_state`). ``sector`` (a linear projection commuting with
++    the energy, e.g. onto fields even in z) is applied to the start and to every
++    step, so the iteration stays in that symmetry sector: in a periodic tube, a
++    near-zero odd mode otherwise lets parity-breaking parts of ~1e-3 survive
++    (ISSUES C3-10). ``callback(step, psi, residual)`` is called after every Newton
++    step. Check the Morse index with :func:`dipgpe.bdg.constrained_hessian`.
+ 
+     Returns (psi, info): info = {"iterations", "residual", "energy", "mu",
+-    "residuals" (per Newton step), "linear_iterations", "converged", "stalled"}. If not
++    "residuals" (per Newton step), "linear_iterations", "linear_tolerances", "converged",
++    "stalled"}. If not
+     converged within ``max_newton`` steps, raises RuntimeError, or returns the
+     last state with converged False when ``strict`` is False.
+     """
+@@ -386,6 +396,9 @@ def refine_saddle(model, psi, *, tol=None, linear_tol=1e-2, max_newton=30, max_l
+     psi = space.real(psi)
+     N = float(space.inner(psi[None], psi[None])[0])
+     ip = lambda a, b: float(_inner(grid, a, b))          # noqa: E731
++    if sector is not None:
++        psi = space.real(sector(psi))
++        psi = psi * math.sqrt(N / ip(psi, psi))
+ 
+     def state(f):
+         E, h = space.energy_gradient(f[None])
+@@ -397,19 +410,24 @@ def refine_saddle(model, psi, *, tol=None, linear_tol=1e-2, max_newton=30, max_l
+         return f * math.sqrt(N / ip(f, f))
+ 
+     E, mu, r, res = state(psi)
+-    residuals, linear = [res], []
++    residuals, linear, etas = [res], [], []
+     stalled = False
++    eta = linear_tol
+     for k in range(max_newton + 1):
+         if res <= tol or k == max_newton:
+             break
+         op = Bogoliubov(model, psi, t=t)
+         _add_deflation(op, [psi] + list(deflate or []))
++        if sector is not None:
++            project = op.project
++            op.project = lambda f, project=project: project(sector(f))
+         shift = max(abs(op.mu), 1.0)
+         A = lambda f: op.project(op.M(op.project(f)))                                  # noqa: E731
+         Minv = lambda f: op.project(op.precondition(op.project(f), shift))             # noqa: E731
+-        delta, its, _ = _minres(A, Minv, -op.project(r), ip, linear_tol, max_linear)
++        delta, its, _ = _minres(A, Minv, -op.project(r), ip, eta, max_linear)
+         delta = space.real(delta)
+         linear.append(its)
++        etas.append(eta)
+         lam = 1.0
+         while True:
+             trial = renormalized(psi + lam * delta)
+@@ -417,20 +435,21 @@ def refine_saddle(model, psi, *, tol=None, linear_tol=1e-2, max_newton=30, max_l
+             if res_t < res or lam <= 1 / 64:
+                 break
+             lam /= 2
+-        if res_t >= res:
+-            stalled = True
+-            break
+         slow = res_t > 0.5 * res
+-        psi, E, mu, r, res = trial, E_t, mu_t, r_t, res_t
+-        residuals.append(res)
+-        if callback is not None:
+-            callback(k + 1, psi, res)
++        if res_t < res:
++            psi, E, mu, r, res = trial, E_t, mu_t, r_t, res_t
++            residuals.append(res)
++            if callback is not None:
++                callback(k + 1, psi, res)
+         if slow and res > tol:
+-            stalled = True
+-            break
++            if eta <= 1e-8:
++                stalled = True
++                break
++            eta = max(eta * 1e-2, 1e-8)
+     converged = res <= tol
+     if not converged and strict:
+         raise RuntimeError(f"refine_saddle: residual {res:.3g} > tol {tol:g} after {len(residuals) - 1} Newton "
+                            f"steps{' (stalled)' if stalled else ''}")
+     return psi, {"iterations": len(residuals) - 1, "residual": res, "energy": E, "mu": mu,
+-                 "residuals": residuals, "linear_iterations": linear, "converged": converged, "stalled": stalled}
++                 "residuals": residuals, "linear_iterations": linear, "linear_tolerances": etas,
++                 "converged": converged, "stalled": stalled}
+diff --git a/tests/test_c3_gates.py b/tests/test_c3_gates.py
+index 8ee8dc4..9905cc7 100644
+--- a/tests/test_c3_gates.py
++++ b/tests/test_c3_gates.py
+@@ -95,6 +95,20 @@ def test_g2_newton_on_a_degenerate_eigenspace():
+     assert abs(info["energy"] - 0.5) < 1e-12 and abs(info["mu"] - 0.5) < 1e-12, info
+ 
+ 
++def test_g2_newton_in_the_even_sector():
++    """With the even sector imposed, Newton from cos x + 0.1 (cos 2x + 1) + 0.05 sin x needs
++    no deflation and lands exactly on cos x / sqrt(pi): the odd part is removed."""
++    grid, model, x = _free_box()
++    mirror = lambda f: torch.roll(torch.flip(f, [-1]), 1, dims=-1)          # noqa: E731
++    start = (torch.cos(x) + 0.1 * torch.cos(2 * x) + 0.1 + 0.05 * torch.sin(x)).to(C128)
++    psi, info = refine_saddle(model, start / torch.sqrt(dipgpe.norm(grid, start)), tol=1e-12,
++                              sector=lambda f: 0.5 * (f + mirror(f)))
++    assert info["converged"], info
++    exact = (torch.cos(x) / math.sqrt(math.pi)).to(C128)
++    err = min(float(dipgpe.norm(grid, psi - exact)), float(dipgpe.norm(grid, psi + exact))) ** 0.5
++    assert err < 1e-12, err
++
++
+ @pytest.mark.parametrize("j", [1, 2])
+ def test_g3_ring_elliptic_states(j):
+     """g = 1, L = 2 pi, m = 0.9 (strongly nonlinear): the analytic state is stationary on

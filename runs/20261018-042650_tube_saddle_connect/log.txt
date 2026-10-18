@@ -1,0 +1,10 @@
+[dipgpe.runs] finished runs with the same name and parameters: 20261018-042212_tube_saddle_connect
+[dipgpe.runs] recording to C:\Users\kyost\Desktop\git\qs\runs\20261018-042650_tube_saddle_connect
+saddle 20261017-234923_tube_saddle_refine: barrier 59.2092 hbar omega, FWHM 11.2 um, contrast 0.539, even sector
+  shrink 0: Omega - Omega_U = 58.9327, FWHM 11.2 um, contrast 0.516, residual 3.1e-04  (0 s)
+  shrink 500: Omega - Omega_U = 9.9873, FWHM 14.1 um, contrast 0.134, residual 1.0e-03  (11 s)
+  shrink: reached after 850 iterations, Omega - Omega_U = 0.0190  (18 s)
+  grow 0: Omega - Omega_U = 58.9539, FWHM 11.2 um, contrast 0.561, residual 3.0e-04  (0 s)
+  grow 500: Omega - Omega_U = 48.0451, FWHM 11.5 um, contrast 0.664, residual 7.0e-04  (11 s)
+  grow 1000: Omega - Omega_U = 14.0933, FWHM 16.7 um, contrast 0.725, residual 7.9e-04  (21 s)
+  grow: reached after 1250 iterations, Omega - Omega_U = -5.6697  (26 s)

@@ -1,0 +1,9 @@
+{
+ "iterations": 3300,
+ "seconds": 484.0546627044678,
+ "converged": false,
+ "perpendicular": 0.00015522171518352529,
+ "residual": 0.00014869491195119246,
+ "saddle": 3,
+ "max_E_minus_E0": 14.500988943502307
+}

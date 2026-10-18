@@ -1,0 +1,17 @@
+[dipgpe.runs] recording to C:\Users\kyost\Desktop\git\qs\runs\20261018-044820_tube_saddle_connect
+saddle 20261018-035537_tube_saddle_refine: barrier 1.3032 hbar omega, FWHM 29.4 um, contrast 0.146, even sector
+  shrink 0: Omega - Omega_U = 1.2898, FWHM 29.7 um, contrast 0.137, residual 4.2e-05  (0 s)
+  shrink 500: Omega - Omega_U = 1.2417, FWHM 29.7 um, contrast 0.127, residual 3.5e-05  (11 s)
+  shrink 1000: Omega - Omega_U = 1.0957, FWHM 32.3 um, contrast 0.109, residual 5.6e-05  (22 s)
+  shrink 1500: Omega - Omega_U = 0.8186, FWHM 34.9 um, contrast 0.085, residual 6.8e-05  (32 s)
+  shrink 2000: Omega - Omega_U = 0.5058, FWHM 40.1 um, contrast 0.061, residual 6.3e-05  (43 s)
+  shrink 2500: Omega - Omega_U = 0.2712, FWHM 45.3 um, contrast 0.042, residual 5.0e-05  (53 s)
+  shrink 3000: Omega - Omega_U = 0.1345, FWHM 50.8 um, contrast 0.028, residual 3.6e-05  (64 s)
+  shrink 3500: Omega - Omega_U = 0.0637, FWHM 56.0 um, contrast 0.018, residual 2.5e-05  (74 s)
+  shrink 4000: Omega - Omega_U = 0.0304, FWHM 61.5 um, contrast 0.012, residual 1.7e-05  (85 s)
+  shrink: NOT reached after 4000 iterations, Omega - Omega_U = 0.0304  (85 s)
+  grow 0: Omega - Omega_U = 1.2881, FWHM 29.4 um, contrast 0.155, residual 4.3e-05  (0 s)
+  grow 500: Omega - Omega_U = 1.1746, FWHM 26.8 um, contrast 0.171, residual 6.8e-05  (11 s)
+  grow 1000: Omega - Omega_U = -1.0864, FWHM 24.2 um, contrast 0.240, residual 4.0e-04  (21 s)
+  grow 1500: Omega - Omega_U = -663.2909, FWHM 24.2 um, contrast 0.804, residual 4.2e-03  (32 s)
+  grow: reached after 1800 iterations, Omega - Omega_U = -1276.6504  (38 s)

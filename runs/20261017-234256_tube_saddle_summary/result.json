@@ -1,0 +1,144 @@
+{
+ "rows": [
+  {
+   "a_s": 90.2,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 59.72143295314163,
+   "delta_N": null,
+   "index": 1,
+   "fwhm_um": 11.202352941176471,
+   "contrast": 0.5425019202726733
+  },
+  {
+   "a_s": 90.2,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 59.8778034215793,
+   "delta_N": -1.1641532182693481e-10,
+   "index": null,
+   "fwhm_um": 10.877647058823529,
+   "contrast": 0.55693718081995
+  },
+  {
+   "a_s": 90.24,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 75.13485551532358,
+   "delta_N": null,
+   "index": 2,
+   "fwhm_um": 11.202352941176471,
+   "contrast": 0.6066278487607344
+  },
+  {
+   "a_s": 90.24,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 75.05899714678526,
+   "delta_N": -1.1641532182693481e-10,
+   "index": 1,
+   "fwhm_um": 11.202352941176471,
+   "contrast": 0.6119457348446261
+  },
+  {
+   "a_s": 90.245,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 77.45916520804167,
+   "delta_N": -1.1641532182693481e-10,
+   "index": 2,
+   "fwhm_um": 11.527058823529412,
+   "contrast": 0.6158086601018198
+  },
+  {
+   "a_s": 90.245,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 77.28936378471553,
+   "delta_N": -1.1641532182693481e-10,
+   "index": 1,
+   "fwhm_um": 11.202352941176471,
+   "contrast": 0.6208930235915155
+  },
+  {
+   "a_s": 90.25,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 79.91283258702606,
+   "delta_N": -2.3283064365386963e-10,
+   "index": 2,
+   "fwhm_um": 11.527058823529412,
+   "contrast": 0.6249847239805373
+  },
+  {
+   "a_s": 90.25,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 79.63941194117069,
+   "delta_N": -1.1641532182693481e-10,
+   "index": 1,
+   "fwhm_um": 11.202352941176471,
+   "contrast": 0.631287699297581
+  },
+  {
+   "a_s": 90.255,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 82.51329914294183,
+   "delta_N": 1.1641532182693481e-10,
+   "index": 2,
+   "fwhm_um": 11.527058823529412,
+   "contrast": 0.6341785004544569
+  },
+  {
+   "a_s": 90.255,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 82.15265584457666,
+   "delta_N": -1.1641532182693481e-10,
+   "index": 1,
+   "fwhm_um": 11.202352941176471,
+   "contrast": 0.6446969825518772
+  },
+  {
+   "a_s": 90.26,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 85.28458259813488,
+   "delta_N": -1.1641532182693481e-10,
+   "index": 2,
+   "fwhm_um": 11.527058823529412,
+   "contrast": 0.6437414766152784
+  },
+  {
+   "a_s": 90.26,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 84.95880804210901,
+   "delta_N": -1.1641532182693481e-10,
+   "index": 1,
+   "fwhm_um": 13.475294117647058,
+   "contrast": 0.6678056700632695
+  },
+  {
+   "a_s": 90.265,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 88.27217990718782,
+   "delta_N": 1.1641532182693481e-10,
+   "index": 2,
+   "fwhm_um": 11.527058823529412,
+   "contrast": 0.655071893706624
+  },
+  {
+   "a_s": 90.265,
+   "cells": 32,
+   "ensemble": "canonical",
+   "barrier": 88.37100607529283,
+   "delta_N": 1.1641532182693481e-10,
+   "index": 2,
+   "fwhm_um": 14.124705882352941,
+   "contrast": 0.6854273716248228
+  }
+ ]
+}

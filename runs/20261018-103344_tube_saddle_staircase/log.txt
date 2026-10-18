@@ -1,0 +1,23 @@
+[dipgpe.runs] recording to C:\Users\kyost\Desktop\git\qs\runs\20261018-103344_tube_saddle_staircase
+start 20261018-054330/saddle: Omega - Omega_U = 91.2716; previous 20261018-052437/saddle: 91.2937
+  rung 1: a = 0.500 (x last step), beta = +8.653e-03, Omega - Omega_U = 91.2924, residual 2.9e-13, converged True  (42 s)
+  rung 1: a = 1.000 (x last step), beta = +1.328e-02, Omega - Omega_U = 91.3481, residual 1.0e-10, converged True  (64 s)
+  rung 1: a = 2.000 (x last step), beta = -7.186e-03, Omega - Omega_U = 91.4088, residual 1.8e-10, converged True  (87 s)
+  rung 1: a = 1.649 (x last step), beta = +4.325e-03, Omega - Omega_U = 91.4128, residual 8.8e-11, converged True  (106 s)
+  rung 1: a = 1.781 (x last step), beta = +3.743e-04, Omega - Omega_U = 91.4158, residual 2.5e-11, converged True  (126 s)
+  rung 1: a = 1.802 (x last step), beta = -2.936e-04, Omega - Omega_U = 91.4158, residual 1.1e-10, converged True  (139 s)
+  rung 1: a = 1.792 (x last step), beta = +1.454e-06, Omega - Omega_U = 91.4159, residual 4.8e-11, converged True  (152 s)
+  Hessian (full space): [-0.005305613555627571, 0.004539226306344733, 0.03209918777604851] residuals [0.04081150128321797, 0.04901109411246503, 0.04618966306108604] (308 it, 105 s, peak 7.5 GiB): index 1
+rung 1: Omega - Omega_U = 91.4159, delta_N = -653.7, index 1  (262 s)
+  rung 2: a = 0.500 (x last step), beta = -2.448e-02, Omega - Omega_U = 91.2961, residual 1.4e-11, converged True  (290 s)
+  rung 2: a = 1.000 (x last step), beta = -2.072e-02, Omega - Omega_U = 91.0574, residual 1.5e-10, converged True  (315 s)
+  rung 2: a = 2.000 (x last step), beta = -1.777e-02, Omega - Omega_U = 91.0107, residual 4.5e-12, converged True  (348 s)
+  rung 2: a = 3.000 (x last step), beta = +7.135e-04, Omega - Omega_U = 90.5941, residual 2.2e-12, converged True  (405 s)
+  rung 2: a = 2.961 (x last step), beta = +1.075e-02, Omega - Omega_U = 90.5897, residual 9.8e-10, converged True  (427 s)
+  rung 2: a = 2.599 (x last step), beta = -2.768e-02, Omega - Omega_U = 90.5911, residual 1.0e-12, converged True  (490 s)
+  rung 2: a = 2.860 (x last step), beta = +1.352e-02, Omega - Omega_U = 90.5630, residual 1.7e-10, converged True  (518 s)
+  rung 2: a = 2.774 (x last step), beta = +2.318e-03, Omega - Omega_U = 90.5496, residual 4.3e-10, converged True  (539 s)
+  rung 2: a = 2.749 (x last step), beta = -1.930e-03, Omega - Omega_U = 90.5495, residual 5.0e-11, converged True  (563 s)
+  rung 2: a = 2.761 (x last step), beta = +2.899e-05, Omega - Omega_U = 90.5493, residual 1.4e-11, converged True  (587 s)
+  Hessian (full space): [0.004063585442544667, 0.004251559070071628, 0.01918138998960202] residuals [0.031551750993782116, 0.04892062383104994, 0.024267603185361183] (333 it, 113 s, peak 7.5 GiB): index 0
+rung 2: Omega - Omega_U = 90.5493, delta_N = -904.3, index 0  (706 s)

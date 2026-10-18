@@ -1,0 +1,14 @@
+[dipgpe.runs] recording to C:\Users\kyost\Desktop\git\qs\runs\20261018-023307_tube_saddle_asym
+  a = 0.0200 (x norm), beta = -5.4091e-03, residual 4.0e-10, converged True  (15 s)
+  a = 0.0500 (x norm), beta = -1.2280e-02, residual 1.4e-10, converged True  (34 s)
+  a = 0.1000 (x norm), beta = -1.6375e-02, residual 2.5e-14, converged True  (76 s)
+  a = 0.1500 (x norm), beta = -8.7795e-03, residual 1.7e-13, converged True  (138 s)
+  a = 0.2000 (x norm), beta = -5.6808e-04, residual 5.2e-11, converged True  (175 s)
+  a = 0.3000 (x norm), beta = +2.1664e-02, residual 2.4e-14, converged True  (288 s)
+  a = 0.2026 (x norm), beta = -3.6642e-04, residual 2.4e-10, converged True  (305 s)
+  a = 0.2042 (x norm), beta = -2.4234e-04, residual 1.1e-10, converged True  (321 s)
+  a = 0.2063 (x norm), beta = -8.4017e-05, residual 1.5e-10, converged True  (337 s)
+  a = 0.2077 (x norm), beta = +2.3807e-05, residual 1.0e-10, converged True  (351 s)
+  a = 0.2074 (x norm), beta = -5.2494e-08, residual 2.2e-11, converged True  (367 s)
+converged True, a = 0.2073883401222125, barrier 86.667965 hbar omega, delta_N = -498.27, residual 7.397615465844446e-11, full residual 1.1918183659438776e-10, multiplier [7.606941407570799e-10], odd part 3.518e-02, peak 3.1 GiB
+  Hessian (full space): [-0.004867943405441423, 0.0009956528512271737, 0.04432740072729728] residuals [0.00939337321786789, 0.04837613924739283, 0.011479525724567292] (231 it, 89 s, peak 7.8 GiB): index 1

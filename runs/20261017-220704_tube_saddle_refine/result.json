@@ -1,0 +1,14 @@
+{
+ "barrier": 59.46282656490803,
+ "residual": 1.2571100195693028e-10,
+ "converged": true,
+ "stalled": false,
+ "newton_steps": 4,
+ "minres": [
+  16,
+  141,
+  133,
+  172
+ ],
+ "seconds": 29.001254081726074
+}

@@ -1,0 +1,356 @@
+diff --git a/benchmarks/tube_saddle.py b/benchmarks/tube_saddle.py
+index 21bc411..42cfbb2 100644
+--- a/benchmarks/tube_saddle.py
++++ b/benchmarks/tube_saddle.py
+@@ -25,6 +25,13 @@ Modes
+          of the nucleus norm ||psi - psi_uniform||; then the lowest
+          ``--index-modes`` Hessian eigenvalues in the full space (no parity
+          sectors, translation deflated). Reviews: docs/reports/C3e_*.
++  connect connectivity of a saddle at fixed mu (``--from-run`` a refine or asym run
++         with its Hessian modes): dipgpe.mep.descend from the saddle +- eps times
++         its unstable mode (eps = ``--eps`` x nucleus norm). The shrinking side
++         should return to the uniform state; the growing side should lengthen the
++         nucleus while Omega falls below the saddle (stopped once the nucleus is
++         ``--grow-cells`` cells longer). Symmetric saddles descend in the even
++         sector, asym ones with a translation phase condition.
+   hessian lowest Hessian eigenvalues of a refined saddle (``--from-run`` a refine
+          run) in the even and odd sectors of z -> -z (translation deflated in the odd
+          one), with the parity of each mode.
+@@ -33,7 +40,8 @@ Modes
+          run (continuation in a_s; a shorter tube is embedded in the uniform
+          state of a longer one); the barrier against the uniform state (tiled
+          cell, same precision) and, with --hessian, the Morse index by parity
+-         sectors. --ensemble grand fixes mu at that of the uniform state
++         sectors (--sector none: no symmetry imposed, the translation fixed by a
++         phase condition, the index in the full space). --ensemble grand fixes mu at that of the uniform state
+          instead of N: the barrier is then Omega = E - mu N of the saddle minus
+          that of the uniform state, the L -> infinity limit without the
+          depletion term of the fixed-N tube (ISSUES C3-13), and delta_N the
+@@ -60,7 +68,7 @@ sys.path.insert(0, str(ROOT / "src"))
+ sys.path.insert(0, str(ROOT / "benchmarks"))
+ import dipgpe  # noqa: E402
+ from dipgpe.bdg import constrained_hessian  # noqa: E402
+-from dipgpe.mep import FieldSpace, break_symmetry, path_through, refine_saddle, string_method  # noqa: E402
++from dipgpe.mep import FieldSpace, break_symmetry, descend, path_through, refine_saddle, string_method  # noqa: E402
+ from tube_coexistence import PER_L  # noqa: E402
+ from tube_localized import cell_state  # noqa: E402
+ from tube_supersolid import UNITS, tube_model  # noqa: E402
+@@ -321,8 +329,10 @@ def refine(args, run):
+     torch.cuda.reset_peak_memory_stats()
+     even = lambda f: 0.5 * (f + mirror(f))                       # noqa: E731
+     odd_start = float((psi0 - mirror(psi0)).abs().norm() / psi0.abs().norm())
++    phase = args.sector == "none"                    # translation fixed by a phase condition instead
+     psi, info = refine_saddle(model, psi0, mu=mu, max_newton=args.max_newton, strict=False, callback=log,
+-                              sector=even)
++                              sector=None if phase else even,
++                              deflate=[_dz(grid, psi0).real.to(grid.dtype)] if phase else None)
+     dN = info["N"] - N
+     barrier = info["energy"] - E_U - (0.0 if mu is None else mu * dN)
+     print(f"barrier {'E' if mu is None else 'Omega'} - uniform = {barrier:.6f} hbar omega, "
+@@ -337,6 +347,7 @@ def refine(args, run):
+            "E_saddle": info["energy"], "barrier": barrier, "residuals": info["residuals"],
+            "linear_iterations": info["linear_iterations"], "steps": steps, "converged": info["converged"],
+            "stalled": info["stalled"], "newton_seconds": time.time() - t0,
++           "full_residual": info["full_residual"], "multipliers": info["multipliers"],
+            "newton_peak_GiB": torch.cuda.max_memory_allocated() / 2 ** 30,
+            "line_density_per_um": (line / PER_L).tolist(), "dz_um": UNITS.microns(grid.dx[2])}
+     run.save_json("tube_saddle_refine.json", out)
+@@ -347,12 +358,21 @@ def refine(args, run):
+         del psi0
+         torch.cuda.empty_cache()                       # Newton's cached blocks fragment the Hessian's memory
+         torch.cuda.reset_peak_memory_stats()
+-        rows = parity_index(model, grid, psi, args.hessian_tol, args.hessian_iter, x0=warm,
+-                            save=run.data("hessian_modes.pt"), mu=mu)
++        if phase:
++            rows = full_index(model, grid, psi, args.hessian_tol, args.hessian_iter, mu, args.index_modes,
++                              x0=None if warm is None else torch.cat(list(warm.values())),
++                              save=run.data("hessian_modes.pt"))
++        else:
++            rows = parity_index(model, grid, psi, args.hessian_tol, args.hessian_iter, x0=warm,
++                                save=run.data("hessian_modes.pt"), mu=mu)
+         out.update(hessian=rows, hessian_peak_GiB=torch.cuda.max_memory_allocated() / 2 ** 30)
+         run.save_json("tube_saddle_refine.json", out)
+-        run.result(index=rows["index"], certified=rows["certified"], even=rows["even"]["eigenvalues"],
+-                   odd=rows["odd"]["eigenvalues"])
++        if phase:
++            run.result(index=rows["index"], complete=rows["complete"], certified=rows["certified"],
++                       eigenvalues=rows["eigenvalues"])
++        else:
++            run.result(index=rows["index"], certified=rows["certified"], even=rows["even"]["eigenvalues"],
++                       odd=rows["odd"]["eigenvalues"])
+ 
+ 
+ def _uniform(model, grid, psi_U, cells, N, ensemble):
+@@ -410,11 +430,95 @@ def asym(args, run):
+     if not info["converged"]:
+         return
+     torch.cuda.empty_cache()
++    rows = full_index(model, grid, psi, args.hessian_tol, args.hessian_iter, mu, args.index_modes,
++                      x0=torch.cat([warm["even"], warm["odd"]]), save=run.data("hessian_modes.pt"))
++    out.update(hessian=rows)
++    run.save_json("tube_saddle_asym.json", out)
++    run.result(index=rows["index"], complete=rows["complete"], certified=rows["certified"],
++               eigenvalues=rows["eigenvalues"])
++
++
++def connect(args, run):
++    if args.ensemble != "grand":
++        raise SystemExit("connect needs --ensemble grand")
++    L, Np, psi_U, _, cells = endpoints(args)
++    grid, model = tube(args, L, Np, DTYPES[args.dtypes])
++    folder = next(dipgpe.runs.runs_dir().glob(args.from_run + "*"))
++    psi_s = torch.load(folder / "data" / "saddle.pt").to("cuda", grid.dtype)
++    modes = stored_modes(folder, grid)
++    if modes is None:
++        raise SystemExit(f"{folder.name} has no Hessian modes")
++    symmetric = "full" not in modes
++    v = (modes["even"] if symmetric else modes["full"])[0].real.to(grid.dtype)
++    N = float(args.density * PER_L * args.cells * L)
++    E_U, mu = _uniform(model, grid, psi_U, args.cells, N, args.ensemble)
++    omega_U = E_U - mu * N
++    psi_u = dipgpe.normalize(grid, psi_U.repeat(1, 1, args.cells).to(grid.dtype), N)
++    dev = psi_s - psi_u
++    scale = float(dipgpe.norm(grid, dev)) ** 0.5
++    v = v / float(dipgpe.norm(grid, v)) ** 0.5
++    if float((v.conj() * dev).sum().real) < 0:       # +v grows the nucleus
++        v = -v
++    E_s = float(dipgpe.energy(model, psi_s))
++    omega_s = E_s - mu * float(dipgpe.norm(grid, psi_s))
++    barrier = omega_s - omega_U
++    dz = UNITS.microns(grid.dx[2])
++
++    def geometry(psi):
++        line = ((psi.abs() ** 2).sum((0, 1)) * grid.dx[0] * grid.dx[1]).double().cpu() / PER_L
++        return nucleus(line.tolist(), dz, args.nz_cell, args.density)
++
++    geo_s = geometry(psi_s)
++    print(f"saddle {folder.name}: barrier {barrier:.4f} hbar omega, FWHM {geo_s['fwhm_um']:.1f} um, "
++          f"contrast {geo_s['contrast']:.3f}, {'even sector' if symmetric else 'phase condition'}", flush=True)
++    sides = {}
++    for side, sign in (("shrink", -1.0), ("grow", 1.0)):
++        t0 = time.time()
++        trace = []
++
++        def watch(it, psi, info, side=side, trace=trace, t0=t0):
++            geo = geometry(psi)
++            d = info["omega"] - omega_U
++            trace.append({"iteration": it, "omega_minus_uniform": d, "N_minus_uniform": info["N"] - N,
++                          "residual": info["residual"], "fwhm_um": geo["fwhm_um"], "contrast": geo["contrast"],
++                          "droplets": geo["droplets"], "seconds": time.time() - t0})
++            if it % (10 * args.every) == 0:
++                print(f"  {side} {it}: Omega - Omega_U = {d:.4f}, FWHM {geo['fwhm_um']:.1f} um, contrast "
++                      f"{geo['contrast']:.3f}, residual {info['residual']:.1e}  ({time.time() - t0:.0f} s)",
++                      flush=True)
++            if side == "shrink":
++                return geo["contrast"] < 0.02 and abs(d) < 1e-3 * barrier
++            return geo["fwhm_um"] >= geo_s["fwhm_um"] + args.grow_cells * args.cell_um and d < barrier
++        psi, info = descend(model, psi_s + sign * args.eps * scale * v, mu=mu, max_iter=args.max_descent,
++                            tau=args.tau, sector=(lambda f: 0.5 * (f + mirror(f))) if symmetric else None,
++                            deflate=None if symmetric else [_dz(grid, psi_s).real.to(grid.dtype)],
++                            callback=watch, callback_every=args.every)
++        geo = geometry(psi)
++        final = {"omega_minus_uniform": info["omega"] - omega_U, "N_minus_uniform": info["N"] - N,
++                 "residual": info["residual"], **geo}
++        if side == "shrink":
++            reached = geo["contrast"] < 0.02 and abs(final["omega_minus_uniform"]) < 1e-3 * barrier
++        else:
++            reached = info["stopped"]
++        sides[side] = {"reached": bool(reached), "iterations": info["iterations"], "converged": info["converged"],
++                       "stopped": info["stopped"], "final": final, "trace": trace}
++        print(f"  {side}: {'reached' if reached else 'NOT reached'} after {info['iterations']} iterations, "
++              f"Omega - Omega_U = {info['omega'] - omega_U:.4f}  ({time.time() - t0:.0f} s)", flush=True)
++    run.save_json("tube_saddle_connect.json", {"from_run": folder.name, "symmetric": symmetric, "mu": mu,
++                                                "barrier": barrier, "saddle": geo_s, "eps": args.eps,
++                                                "tau": args.tau, "sides": sides})
++    run.result(barrier=barrier, shrink_reached=sides["shrink"]["reached"], grow_reached=sides["grow"]["reached"],
++               connected=sides["shrink"]["reached"] and sides["grow"]["reached"])
++
++
++def full_index(model, grid, psi, tol, iters, mu, n, x0=None, save=None):
++    """Lowest ``n`` Hessian eigenvalues in the full space (no parity sectors), the
++    translation d psi/dz deflated; for states without a mirror symmetry (asym) or
++    refined with a phase condition (refine --sector none)."""
+     torch.cuda.reset_peak_memory_stats()
+     t1 = time.time()
+-    x0 = torch.cat([warm["even"], warm["odd"]])
+-    lam, modes, hinfo = constrained_hessian(model, psi, n_modes=args.index_modes, deflate=[_dz(grid, psi)],
+-                                            tol=args.hessian_tol, max_iter=args.hessian_iter, mu=mu, x0=x0)
++    lam, modes, hinfo = constrained_hessian(model, psi, n_modes=n, deflate=[_dz(grid, psi)], tol=tol,
++                                            max_iter=iters, mu=mu, x0=x0)
+     lam = lam.tolist()
+     parity = [float((m - mirror(m)).abs().norm() / (m + mirror(m)).abs().norm().clamp_min(1e-300)) for m in modes]
+     rows = {"eigenvalues": lam, "residuals": hinfo["residual"], "iterations": hinfo["iterations"],
+@@ -425,10 +529,9 @@ def asym(args, run):
+     print(f"  Hessian (full space): {lam} residuals {hinfo['residual']} ({hinfo['iterations']} it, "
+           f"{time.time() - t1:.0f} s, peak {rows['peak_GiB']:.1f} GiB): index {rows['index']}"
+           f"{'' if rows['complete'] else ' (incomplete: all computed eigenvalues negative)'}", flush=True)
+-    torch.save({"full": modes.to(torch.complex64).cpu()}, run.data("hessian_modes.pt"))
+-    out.update(hessian=rows)
+-    run.save_json("tube_saddle_asym.json", out)
+-    run.result(index=rows["index"], complete=rows["complete"], certified=rows["certified"], eigenvalues=lam)
++    if save is not None:
++        torch.save({"full": modes.to(torch.complex64).cpu()}, save)
++    return rows
+ 
+ 
+ def hessian(args, run):
+@@ -539,7 +642,7 @@ def summary(args, run):
+ 
+ def main():
+     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+-    ap.add_argument("mode", choices=["cost", "pilot", "refine", "asym", "hessian", "summary"])
++    ap.add_argument("mode", choices=["cost", "pilot", "refine", "asym", "connect", "hessian", "summary"])
+     ap.add_argument("--runs", type=str, default="", help="summary: comma-separated refine run ids")
+     ap.add_argument("--a", type=float, default=None, help="scattering length (a0); required except for summary")
+     ap.add_argument("--density", type=float, default=6250.0, help="mean density (atoms per micron)")
+@@ -575,7 +678,15 @@ def main():
+     ap.add_argument("--gpu-fraction", type=float, default=0.85, help="cap on the GPU memory this process may use")
+     ap.add_argument("--amplitudes", type=str, default="0.02,0.05,0.1,0.15,0.2,0.3,0.4,0.5",
+                     help="asym: odd amplitudes, in units of the nucleus norm")
+-    ap.add_argument("--index-modes", type=int, default=3, help="asym: Hessian eigenvalues in the full space")
++    ap.add_argument("--index-modes", type=int, default=3,
++                    help="asym, refine --sector none: Hessian eigenvalues in the full space")
++    ap.add_argument("--eps", type=float, default=0.05, help="connect: start offset, in units of the nucleus norm")
++    ap.add_argument("--tau", type=float, default=0.5, help="connect: descent step")
++    ap.add_argument("--max-descent", type=int, default=8000, help="connect: descent iterations per side")
++    ap.add_argument("--grow-cells", type=float, default=3.0,
++                    help="connect: the growing side counts as reached once the nucleus is this many cells longer")
++    ap.add_argument("--sector", choices=["even", "none"], default="even",
++                    help="refine: impose z -> -z symmetry, or none (translation fixed by a phase condition)")
+     ap.add_argument("--ensemble", choices=["canonical", "grand"], default="canonical",
+                     help="refine, hessian: fixed N, or fixed mu of the uniform state (grand canonical)")
+     args = ap.parse_args()
+@@ -588,7 +699,7 @@ def main():
+         # spill GPU allocations into system memory (a 64-cell Hessian filled 30 GB of RAM, ISSUES C3-11)
+         torch.cuda.set_per_process_memory_fraction(args.gpu_fraction)
+     with dipgpe.runs.Run(f"tube_saddle_{args.mode}", vars(args)) as run:
+-        {"cost": cost, "pilot": pilot, "refine": refine, "asym": asym, "hessian": hessian,
++        {"cost": cost, "pilot": pilot, "refine": refine, "asym": asym, "connect": connect, "hessian": hessian,
+          "summary": summary}[args.mode](args, run)
+ 
+ 
+diff --git a/src/dipgpe/mep.py b/src/dipgpe/mep.py
+index 7d5950a..f5e02b5 100644
+--- a/src/dipgpe/mep.py
++++ b/src/dipgpe/mep.py
+@@ -597,3 +597,75 @@ def break_symmetry(model, psi, mode, amplitudes, *, mu=None, deflate=None, tol=N
+     info.update(a=a_out, polish=polish,
+                 converged=bool(polish["converged"] and abs(a_out) >= 0.5 * abs(best[1]["a"])))
+     return out, info
++
++
++def descend(model, psi, *, mu, max_iter=20_000, tau=0.5, tol=None, deflate=None, sector=None, t=0.0,
++            callback=None, callback_every=50):
++    """Downhill relaxation of Omega = E - mu N at fixed chemical potential (no norm
++    constraint), for the connectivity check of a saddle (C3-2 (e); review
++    docs/reports/C3e_codex_answer.md): started on both sides of its unstable mode,
++    one run should reach the metastable state and the other the growing product.
++    At fixed N use :func:`dipgpe.ground_state`.
++
++    Nesterov-accelerated gradient descent with gradient restart (O'Donoghue &
++    Candes, Found. Comput. Math. 15, 715 (2015)) on real fields: the gradient
++    H psi - mu psi is preconditioned by (|k|^2/2 + max(|mu|, 1))^-1, kept in
++    ``sector`` and orthogonal to ``deflate`` (fixed fields whose components keep
++    their start values, e.g. a translation phase condition). It is a descent path,
++    not the physical dynamics. Stops when the residual ||H psi - mu psi|| / ||psi||
++    is below ``tol`` (default as :func:`refine_saddle`; a minimum or another
++    stationary state), when ``callback(iteration, psi, info)`` returns True (e.g.
++    once the product is recognized), or after ``max_iter`` iterations.
++
++    Returns (psi, info): info = {"iterations", "omega", "N", "residual",
++    "converged", "stopped", "history" (iteration, omega, N, residual every
++    ``callback_every`` iterations)}.
++    """
++    space = FieldSpace(model, t)
++    grid = model.grid
++    if tol is None:
++        tol = _residual_tol(grid)
++    ip = lambda a, b: float(_inner(grid, a, b))          # noqa: E731
++    psi = space.real(psi if sector is None else sector(psi))
++    cons = []
++    for c in (deflate or []):                            # orthonormal (same inner product as ip)
++        c = space.real(c.to(psi.device))
++        for q in cons:
++            c = c - ip(q, c) * q
++        cons.append(c / math.sqrt(ip(c, c)))
++    inv = 1.0 / (0.5 * grid.k2 + max(abs(mu), 1.0))
++
++    def project(f):
++        if sector is not None:
++            f = sector(f)
++        for q in cons:
++            f = f - ip(q, f) * q
++        return f
++
++    x = y = psi
++    k_mom, history = 0, []
++    stopped = converged = False
++    for it in range(max_iter + 1):
++        E, h = space.energy_gradient(y[None])
++        g = project(h[0] - mu * y)
++        n = ip(y, y)
++        res = math.sqrt(ip(g, g) / n)
++        info = {"omega": float(E[0]) - mu * n, "N": n, "residual": res}
++        if it % callback_every == 0:
++            history.append((it, info["omega"], n, res))
++            if callback is not None and callback(it, y, info):
++                stopped = True
++                break
++        if res <= tol:
++            converged = True
++            break
++        if it == max_iter:
++            break
++        x_new = y - tau * project(space.real(grid.ifft(grid.fft(g) * inv)))
++        if ip(g, x_new - x) > 0:                         # gradient restart: momentum points uphill
++            k_mom = 0
++        k_mom += 1
++        y = x_new + ((k_mom - 1) / (k_mom + 2)) * (x_new - x)
++        x = x_new
++    return y, {"iterations": it, "omega": info["omega"], "N": info["N"], "residual": info["residual"],
++               "converged": converged, "stopped": stopped, "history": history}
+diff --git a/tests/test_mep.py b/tests/test_mep.py
+index ef6410b..325b2e3 100644
+--- a/tests/test_mep.py
++++ b/tests/test_mep.py
+@@ -8,7 +8,7 @@ import torch
+ 
+ import dipgpe
+ from dipgpe.bdg import constrained_hessian
+-from dipgpe.mep import FieldSpace, break_symmetry, path_through, refine_saddle, string_method
++from dipgpe.mep import FieldSpace, break_symmetry, descend, path_through, refine_saddle, string_method
+ from util import C64, C128, DEVICE
+ 
+ 
+@@ -219,3 +219,31 @@ def test_break_symmetry_double_well():
+     assert err ** 0.5 < 1e-8, err
+     lam, _, _ = constrained_hessian(model, out, n_modes=2, mu=mu)
+     assert lam[0] < -0.5 and lam[1] > 0.1, lam
++
++
++def test_descend_connects_both_sides():
++    """Connectivity at fixed mu: in the attractive double well the self-trapped state has
++    index 1, its unstable mode changing N (dN/dmu < 0). Descending from it on either side
++    of that mode reaches psi = 0 (Omega = 0, a minimum since mu lies below the lowest
++    single-particle level) on one side, and a state of growing N and falling Omega on
++    the other (Omega is unbounded below for an attractive 1D gas at fixed mu)."""
++    grid = dipgpe.Grid(128, 16.0, dtype=C128, device=DEVICE)
++    x = grid.x64[0]
++    V = 0.5 * x * x + 5.0 * torch.exp(-x * x / 0.72)
++    model = dipgpe.GPE(grid, dipgpe.Potential(V), dipgpe.Contact(-1.0))
++    start = torch.exp(-(x + 1.5) ** 2).to(C128)
++    psi, ie = dipgpe.ground_state(model, start / torch.sqrt(dipgpe.norm(grid, start)))
++    mu = float(dipgpe.chemical_potential(model, psi))
++    _, il = dipgpe.ground_state(dipgpe.GPE(grid, dipgpe.Potential(V)), start / torch.sqrt(dipgpe.norm(grid, start)))
++    assert mu < float(il["energy"]), (mu, il["energy"])            # psi = 0 is a minimum of Omega
++    omega = float(ie["energy"]) - mu * 1.0
++    lam, modes, _ = constrained_hessian(model, psi, n_modes=2, mu=mu)
++    assert lam[0] < -0.5 < 0.1 < lam[1], lam
++    v = modes[0].real.to(C128)
++    v = v / torch.sqrt(dipgpe.norm(grid, v))
++    if float((v.conj() * psi).sum().real) < 0:
++        v = -v                                                     # +v adds atoms
++    down, info = descend(model, psi - 0.1 * v, mu=mu, callback=lambda it, f, i: i["N"] < 1e-8, callback_every=10)
++    assert info["stopped"] and info["omega"] < 1e-8, info
++    up, info = descend(model, psi + 0.1 * v, mu=mu, callback=lambda it, f, i: i["N"] > 1.5, callback_every=10)
++    assert info["stopped"] and info["omega"] < omega - 0.1, (info, omega)

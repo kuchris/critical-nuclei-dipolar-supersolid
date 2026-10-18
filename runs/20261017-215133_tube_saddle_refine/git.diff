@@ -1,0 +1,43 @@
+diff --git a/benchmarks/tube_saddle.py b/benchmarks/tube_saddle.py
+index 0c29f28..84a4660 100644
+--- a/benchmarks/tube_saddle.py
++++ b/benchmarks/tube_saddle.py
+@@ -202,7 +202,27 @@ def start_state(args, grid, psi_U):
+                 E = pj["energies_minus_E0"]
+                 image = max(range(1, len(E) - 1), key=lambda i: E[i])
+         psi0 = torch.load(folder / "data" / "string.pt")[image]
+-    psi0 = psi0.to("cuda", grid.dtype)
++    psi0 = psi0.to("cuda", torch.complex128)
++    import json
++    meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
++    src = meta.get("params") or meta.get("parameters")
++    if (src["L_perp"], src["dx"], src["nz_cell"]) != (args.L_perp, args.dx, args.nz_cell):
++        # another grid (C3-2 (f)): a larger transverse box is padded with zeros at the
++        # source spacing, then the field is Fourier-interpolated to this spacing
++        L = args.cell_um / UNITS.microns(1.0)
++        Np_s = psi0.shape[0]
++        if src["L_perp"] != args.L_perp:
++            add = int(round((args.L_perp - src["L_perp"]) / src["dx"]))
++            if add < 0 or add % 2:
++                raise SystemExit(f"cannot pad L_perp {src['L_perp']} to {args.L_perp} at dx {src['dx']}")
++            psi0 = torch.nn.functional.pad(psi0, (0, 0, add // 2, add // 2, add // 2, add // 2))
++            Np_s += add
++        g_from = dipgpe.Grid((Np_s, Np_s, psi0.shape[2]), (args.L_perp, args.L_perp, psi0.shape[2] // src["nz_cell"] * L),
++                             dtype=torch.complex128, device="cuda")
++        g_to = dipgpe.Grid((grid.shape[0], grid.shape[1], psi0.shape[2] // src["nz_cell"] * args.nz_cell),
++                           g_from.length, dtype=torch.complex128, device="cuda")
++        psi0 = dipgpe.resample(psi0, g_from, g_to).real.to(torch.complex128)
++    psi0 = psi0.to(grid.dtype)
+     extra = grid.shape[2] - psi0.shape[2]
+     if extra:
+         pad = extra // (2 * args.nz_cell)
+@@ -261,7 +281,8 @@ def refine(args, run):
+     L, Np, psi_U, psi_M, cells = endpoints(args)
+     grid, model = tube(args, L, Np, DTYPES[args.dtypes])
+     psi0, source, image = start_state(args, grid, psi_U)
+-    warm = stored_modes(next(dipgpe.runs.runs_dir().glob((args.modes_from or args.from_run) + "*")), grid)
++    warm = (stored_modes(next(dipgpe.runs.runs_dir().glob((args.modes_from or args.from_run) + "*")), grid)
++            if args.hessian else None)
+     N = float(args.density * PER_L * args.cells * L)
+     E_U = float(dipgpe.energy(model, dipgpe.normalize(grid, psi_U.repeat(1, 1, args.cells).to(grid.dtype), N)))
+     t0 = time.time()

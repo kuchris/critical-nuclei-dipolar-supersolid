@@ -1,0 +1,21 @@
+{
+ "barrier": 1.3283831076696515,
+ "residual": 3.413184013960335e-10,
+ "converged": true,
+ "stalled": false,
+ "newton_steps": 2,
+ "minres": [
+  125,
+  465
+ ],
+ "seconds": 16.37709927558899,
+ "index": 2,
+ "certified": false,
+ "even": [
+  -0.014705571226795423,
+  0.005117829540909303
+ ],
+ "odd": [
+  -1.451082842901788e-08
+ ]
+}

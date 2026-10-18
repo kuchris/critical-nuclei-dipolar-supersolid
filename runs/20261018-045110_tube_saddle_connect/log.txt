@@ -1,0 +1,15 @@
+[dipgpe.runs] recording to C:\Users\kyost\Desktop\git\qs\runs\20261018-045110_tube_saddle_connect
+saddle 20261018-040807_tube_saddle_refine: barrier 83.7218 hbar omega, FWHM 11.5 um, contrast 0.650, phase condition
+  shrink 0: Omega - Omega_U = 83.6229, FWHM 11.2 um, contrast 0.636, residual 3.7e-04  (0 s)
+  shrink 500: Omega - Omega_U = 82.9882, FWHM 11.2 um, contrast 0.610, residual 1.7e-04  (11 s)
+  shrink 1000: Omega - Omega_U = 55.4609, FWHM 10.9 um, contrast 0.386, residual 1.5e-03  (22 s)
+  shrink: reached after 1400 iterations, Omega - Omega_U = 0.0634  (30 s)
+  grow 0: Omega - Omega_U = 83.6582, FWHM 11.5 um, contrast 0.664, residual 3.7e-04  (0 s)
+  grow 500: Omega - Omega_U = 83.5740, FWHM 13.5 um, contrast 0.668, residual 4.0e-05  (11 s)
+  grow 1000: Omega - Omega_U = 83.4433, FWHM 13.8 um, contrast 0.674, residual 5.2e-05  (22 s)
+  grow 1500: Omega - Omega_U = 83.2154, FWHM 13.8 um, contrast 0.681, residual 6.9e-05  (32 s)
+  grow 2000: Omega - Omega_U = 82.7728, FWHM 14.1 um, contrast 0.688, residual 1.0e-04  (43 s)
+  grow 2500: Omega - Omega_U = 81.7442, FWHM 14.1 um, contrast 0.697, residual 1.5e-04  (54 s)
+  grow 3000: Omega - Omega_U = 79.8515, FWHM 14.4 um, contrast 0.706, residual 1.7e-04  (65 s)
+  grow 4000: Omega - Omega_U = 77.4297, FWHM 19.3 um, contrast 0.714, residual 1.1e-04  (86 s)
+  grow: NOT reached after 4000 iterations, Omega - Omega_U = 77.4297  (86 s)

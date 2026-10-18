@@ -1,0 +1,19 @@
+{
+ "states": [
+  {
+   "rung": 1,
+   "converged": true,
+   "omega_minus_uniform": 90.15834545064718,
+   "delta_N": -1089.2432961695595,
+   "index": 1
+  },
+  {
+   "rung": 2,
+   "converged": true,
+   "omega_minus_uniform": 89.73641738668084,
+   "delta_N": -1234.133822614327,
+   "index": 1
+  }
+ ],
+ "seconds": 864.2974889278412
+}

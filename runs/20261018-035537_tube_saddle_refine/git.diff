@@ -1,0 +1,112 @@
+diff --git a/benchmarks/tube_saddle.py b/benchmarks/tube_saddle.py
+index 21bc411..0978c79 100644
+--- a/benchmarks/tube_saddle.py
++++ b/benchmarks/tube_saddle.py
+@@ -33,7 +33,8 @@ Modes
+          run (continuation in a_s; a shorter tube is embedded in the uniform
+          state of a longer one); the barrier against the uniform state (tiled
+          cell, same precision) and, with --hessian, the Morse index by parity
+-         sectors. --ensemble grand fixes mu at that of the uniform state
++         sectors (--sector none: no symmetry imposed, the translation fixed by a
++         phase condition, the index in the full space). --ensemble grand fixes mu at that of the uniform state
+          instead of N: the barrier is then Omega = E - mu N of the saddle minus
+          that of the uniform state, the L -> infinity limit without the
+          depletion term of the fixed-N tube (ISSUES C3-13), and delta_N the
+@@ -321,8 +322,10 @@ def refine(args, run):
+     torch.cuda.reset_peak_memory_stats()
+     even = lambda f: 0.5 * (f + mirror(f))                       # noqa: E731
+     odd_start = float((psi0 - mirror(psi0)).abs().norm() / psi0.abs().norm())
++    phase = args.sector == "none"                    # translation fixed by a phase condition instead
+     psi, info = refine_saddle(model, psi0, mu=mu, max_newton=args.max_newton, strict=False, callback=log,
+-                              sector=even)
++                              sector=None if phase else even,
++                              deflate=[_dz(grid, psi0).real.to(grid.dtype)] if phase else None)
+     dN = info["N"] - N
+     barrier = info["energy"] - E_U - (0.0 if mu is None else mu * dN)
+     print(f"barrier {'E' if mu is None else 'Omega'} - uniform = {barrier:.6f} hbar omega, "
+@@ -337,6 +340,7 @@ def refine(args, run):
+            "E_saddle": info["energy"], "barrier": barrier, "residuals": info["residuals"],
+            "linear_iterations": info["linear_iterations"], "steps": steps, "converged": info["converged"],
+            "stalled": info["stalled"], "newton_seconds": time.time() - t0,
++           "full_residual": info["full_residual"], "multipliers": info["multipliers"],
+            "newton_peak_GiB": torch.cuda.max_memory_allocated() / 2 ** 30,
+            "line_density_per_um": (line / PER_L).tolist(), "dz_um": UNITS.microns(grid.dx[2])}
+     run.save_json("tube_saddle_refine.json", out)
+@@ -347,12 +351,21 @@ def refine(args, run):
+         del psi0
+         torch.cuda.empty_cache()                       # Newton's cached blocks fragment the Hessian's memory
+         torch.cuda.reset_peak_memory_stats()
+-        rows = parity_index(model, grid, psi, args.hessian_tol, args.hessian_iter, x0=warm,
+-                            save=run.data("hessian_modes.pt"), mu=mu)
++        if phase:
++            rows = full_index(model, grid, psi, args.hessian_tol, args.hessian_iter, mu, args.index_modes,
++                              x0=None if warm is None else torch.cat(list(warm.values())),
++                              save=run.data("hessian_modes.pt"))
++        else:
++            rows = parity_index(model, grid, psi, args.hessian_tol, args.hessian_iter, x0=warm,
++                                save=run.data("hessian_modes.pt"), mu=mu)
+         out.update(hessian=rows, hessian_peak_GiB=torch.cuda.max_memory_allocated() / 2 ** 30)
+         run.save_json("tube_saddle_refine.json", out)
+-        run.result(index=rows["index"], certified=rows["certified"], even=rows["even"]["eigenvalues"],
+-                   odd=rows["odd"]["eigenvalues"])
++        if phase:
++            run.result(index=rows["index"], complete=rows["complete"], certified=rows["certified"],
++                       eigenvalues=rows["eigenvalues"])
++        else:
++            run.result(index=rows["index"], certified=rows["certified"], even=rows["even"]["eigenvalues"],
++                       odd=rows["odd"]["eigenvalues"])
+ 
+ 
+ def _uniform(model, grid, psi_U, cells, N, ensemble):
+@@ -410,11 +423,22 @@ def asym(args, run):
+     if not info["converged"]:
+         return
+     torch.cuda.empty_cache()
++    rows = full_index(model, grid, psi, args.hessian_tol, args.hessian_iter, mu, args.index_modes,
++                      x0=torch.cat([warm["even"], warm["odd"]]), save=run.data("hessian_modes.pt"))
++    out.update(hessian=rows)
++    run.save_json("tube_saddle_asym.json", out)
++    run.result(index=rows["index"], complete=rows["complete"], certified=rows["certified"],
++               eigenvalues=rows["eigenvalues"])
++
++
++def full_index(model, grid, psi, tol, iters, mu, n, x0=None, save=None):
++    """Lowest ``n`` Hessian eigenvalues in the full space (no parity sectors), the
++    translation d psi/dz deflated; for states without a mirror symmetry (asym) or
++    refined with a phase condition (refine --sector none)."""
+     torch.cuda.reset_peak_memory_stats()
+     t1 = time.time()
+-    x0 = torch.cat([warm["even"], warm["odd"]])
+-    lam, modes, hinfo = constrained_hessian(model, psi, n_modes=args.index_modes, deflate=[_dz(grid, psi)],
+-                                            tol=args.hessian_tol, max_iter=args.hessian_iter, mu=mu, x0=x0)
++    lam, modes, hinfo = constrained_hessian(model, psi, n_modes=n, deflate=[_dz(grid, psi)], tol=tol,
++                                            max_iter=iters, mu=mu, x0=x0)
+     lam = lam.tolist()
+     parity = [float((m - mirror(m)).abs().norm() / (m + mirror(m)).abs().norm().clamp_min(1e-300)) for m in modes]
+     rows = {"eigenvalues": lam, "residuals": hinfo["residual"], "iterations": hinfo["iterations"],
+@@ -425,10 +449,9 @@ def asym(args, run):
+     print(f"  Hessian (full space): {lam} residuals {hinfo['residual']} ({hinfo['iterations']} it, "
+           f"{time.time() - t1:.0f} s, peak {rows['peak_GiB']:.1f} GiB): index {rows['index']}"
+           f"{'' if rows['complete'] else ' (incomplete: all computed eigenvalues negative)'}", flush=True)
+-    torch.save({"full": modes.to(torch.complex64).cpu()}, run.data("hessian_modes.pt"))
+-    out.update(hessian=rows)
+-    run.save_json("tube_saddle_asym.json", out)
+-    run.result(index=rows["index"], complete=rows["complete"], certified=rows["certified"], eigenvalues=lam)
++    if save is not None:
++        torch.save({"full": modes.to(torch.complex64).cpu()}, save)
++    return rows
+ 
+ 
+ def hessian(args, run):
+@@ -575,7 +598,10 @@ def main():
+     ap.add_argument("--gpu-fraction", type=float, default=0.85, help="cap on the GPU memory this process may use")
+     ap.add_argument("--amplitudes", type=str, default="0.02,0.05,0.1,0.15,0.2,0.3,0.4,0.5",
+                     help="asym: odd amplitudes, in units of the nucleus norm")
+-    ap.add_argument("--index-modes", type=int, default=3, help="asym: Hessian eigenvalues in the full space")
++    ap.add_argument("--index-modes", type=int, default=3,
++                    help="asym, refine --sector none: Hessian eigenvalues in the full space")
++    ap.add_argument("--sector", choices=["even", "none"], default="even",
++                    help="refine: impose z -> -z symmetry, or none (translation fixed by a phase condition)")
+     ap.add_argument("--ensemble", choices=["canonical", "grand"], default="canonical",
+                     help="refine, hessian: fixed N, or fixed mu of the uniform state (grand canonical)")
+     args = ap.parse_args()

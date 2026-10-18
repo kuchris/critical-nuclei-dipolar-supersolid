@@ -1,0 +1,75 @@
+diff --git a/src/dipgpe/mep.py b/src/dipgpe/mep.py
+index b38a001..996393e 100644
+--- a/src/dipgpe/mep.py
++++ b/src/dipgpe/mep.py
+@@ -222,14 +222,15 @@ def string_method(space, images, *, step=0.5, tol=None, residual_tol=None, climb
+     climbing image is the highest interior image at that moment. ``fixed_ends``
+     keeps the end images; otherwise they relax to their minima.
+     ``callback(iteration, images, info)`` is called every ``callback_every``
+-    iterations.
++    iterations; if it returns True the iteration stops there (info["stopped"]
++    True, not converged), e.g. at a time budget.
+ 
+     Returns (images, info): info = {"energies" (float64, per image), "saddle"
+     (index of the climbing image or None), "barrier" (E_saddle - E_0, or the
+     highest energy minus E_0 without climbing), "residual" (of the climbing
+     image), "perpendicular" (the largest normal part), "iterations",
+-    "converged"}. If not converged within ``max_iter``, raises RuntimeError, or
+-    returns with converged False when ``strict`` is False.
++    "converged", "stopped"}. If not converged within ``max_iter``, raises
++    RuntimeError, or returns with converged False when ``strict`` is False.
+     """
+     X = space.real(images)
+     n = X.shape[0]
+@@ -247,6 +248,7 @@ def string_method(space, images, *, step=0.5, tol=None, residual_tol=None, climb
+             residual_tol = max(1e-5 if single else 1e-9, 4 * floor)
+     c = None
+     res_c = None
++    stop = False
+     for it in range(max_iter + 1):
+         E, h = space.energy_gradient(X)
+         nx = space.inner(X, X)
+@@ -263,9 +265,9 @@ def string_method(space, images, *, step=0.5, tol=None, residual_tol=None, climb
+         if c is not None:
+             res_c = float(torch.sqrt(space.inner(r[c:c + 1], r[c:c + 1]))[0]) / sqrtN
+         done = perp <= tol and (not climb or (c is not None and res_c <= residual_tol))
+-        if callback is not None and it % callback_every == 0:
+-            callback(it, X, {"energies": E, "saddle": c, "residual": res_c, "perpendicular": perp})
+-        if done or it == max_iter:
++        if callback is not None and it % callback_every == 0 and not done:
++            stop = bool(callback(it, X, {"energies": E, "saddle": c, "residual": res_c, "perpendicular": perp}))
++        if done or stop or it == max_iter:
+             break
+         if climb and c is None and perp <= climb_tol:
+             c = int(torch.argmax(E[1:-1])) + 1
+@@ -285,10 +287,10 @@ def string_method(space, images, *, step=0.5, tol=None, residual_tol=None, climb
+                 W[j, j] = 1.0
+         Y = _apply(W, Y)
+         X = space.real(Y * _scale(space, Y, N))
+-    if not done and strict:
++    if not done and not stop and strict:
+         raise RuntimeError(f"string_method: normal gradient {perp:.3g}, saddle residual {res_c} "
+                            f"after {max_iter} iterations")
+     E64 = E.to(torch.float64).cpu()
+     barrier = float(E64[c] - E64[0]) if c is not None else float(E64.max() - E64[0])
+     return X, {"energies": E64, "saddle": c, "barrier": barrier, "residual": res_c, "perpendicular": perp,
+-               "iterations": it, "converged": done}
++               "iterations": it, "converged": done, "stopped": stop}
+diff --git a/tests/test_mep.py b/tests/test_mep.py
+index f7e9712..cc93212 100644
+--- a/tests/test_mep.py
++++ b/tests/test_mep.py
+@@ -127,6 +127,13 @@ def test_string_converges_on_every_image():
+     assert dist[1] < 0.6 * dist[0] and dist[1] < 0.02, dist
+ 
+ 
++def test_callback_stops_the_string():
++    s = torch.linspace(0, 1, 9, dtype=torch.float64)
++    X = torch.stack([torch.cos(math.pi * s), 0.6 * torch.sin(math.pi * s), 0.8 * torch.sin(math.pi * s)], dim=1)
++    _, info = string_method(Sphere(), X, step=0.2, callback=lambda it, X, info: it >= 5, callback_every=1)
++    assert info["stopped"] and not info["converged"] and info["iterations"] == 5, info
++
++
+ def test_rotation_is_refused():
+     grid = dipgpe.Grid((16, 16), 8.0, dtype=C128, device=DEVICE)
+     model = dipgpe.GPE(grid, dipgpe.Potential(dipgpe.harmonic(grid)), dipgpe.Rotation(0.5))

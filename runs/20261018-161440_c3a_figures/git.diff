@@ -1,0 +1,15 @@
+diff --git a/benchmarks/c3a_figures.py b/benchmarks/c3a_figures.py
+index 66ea2f4..30795f8 100644
+--- a/benchmarks/c3a_figures.py
++++ b/benchmarks/c3a_figures.py
+@@ -711,7 +711,9 @@ def fig7(out):
+     deficit = two_sigma(a) - np.array([Eb[x] for x in a])
+     w = drive(a)
+     by_kind(bx, w, deficit, [kinds[x] for x in a])
+-    bx.errorbar(w[-1], deficit[-1], yerr=0.2, color=STYLE["second rung"][1], capsize=2, lw=0.8)  # RESULTS: +-0.2
++    # 2 sigma is uncertain by about +-0.3: the 32-cell, 64-cell and reference-free sigma differ by up to 0.13
++    # (paper Appendix D); shown at the last point, where it matters
++    bx.errorbar(w[-1], deficit[-1], yerr=0.3, color=STYLE["second rung"][1], capsize=2, lw=0.8)
+     for x, y, a_s in zip(w, deficit, a):
+         bx.annotate(f"{a_s:g}", (x, y), xytext=(5, 0), textcoords="offset points", va="center", fontsize=6)
+     bx.axhline(0, color="0.5", lw=0.6)

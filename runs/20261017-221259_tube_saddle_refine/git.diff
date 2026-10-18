@@ -1,0 +1,41 @@
+diff --git a/src/dipgpe/terms.py b/src/dipgpe/terms.py
+index dccb26e..9bb7936 100644
+--- a/src/dipgpe/terms.py
++++ b/src/dipgpe/terms.py
+@@ -317,21 +317,27 @@ def _tube_outer(k, e, R, g_dd, panel=0.5, nodes_per_panel=16):
+         starts = R + panel * torch.arange(n_panels, dtype=torch.float64, device=device)
+         rho = (starts[:, None] + panel * (u[None, :] + 1) / 2).reshape(-1)       # (M,)
+         wr = (panel / 2 * w).repeat(n_panels) * rho                              # weights * rho
+-        qr = q_pos[None, :] * rho[:, None]                                       # (M, Nq)
+-        k0, k1 = torch.special.modified_bessel_k0(qr), torch.special.modified_bessel_k1(qr)
+-        k2 = k0 + 2 * k1 / qr
+-        A = (2 * q_pos[None, :] / rho[:, None]) * k1 - q_pos[None, :] ** 2 * k2  # (M, Nq)
+-        B = q_pos[None, :] ** 2 * k2
+         flat_k = kperp.reshape(-1)
+         unique_k, inverse = torch.unique(flat_k, return_inverse=True)
+         IA = torch.empty((unique_k.numel(), q_pos.numel()), dtype=torch.float64, device=device)
+         IB = torch.empty_like(IA)
+-        for start in range(0, unique_k.numel(), 512):            # bound memory: (512, M) at a time
+-            kr = unique_k[start:start + 512, None] * rho[None, :]
++        # M and the number of |kz| both grow with the tube length, so the (M, Nq) Bessel
++        # tables are built per q block (at 128 cells of 2.76 um, M ~ 1.1e5 and Nq ~ 1.1e3:
++        # ~1 GB per full table), and the (k, M) tables per k block
++        kc, qc = 256, 256
++        for start in range(0, unique_k.numel(), kc):
++            kr = unique_k[start:start + kc, None] * rho[None, :]
+             j0, j1 = torch.special.bessel_j0(kr), torch.special.bessel_j1(kr)
+             j2 = torch.where(kr > 0, 2 * j1 / torch.where(kr > 0, kr, 1.0) - j0, 0.0)
+-            IA[start:start + 512] = (j0 * wr) @ A
+-            IB[start:start + 512] = (j2 * wr) @ B
++            j0w, j2w = j0 * wr, j2 * wr
++            del kr, j0, j1, j2
++            for qs in range(0, q_pos.numel(), qc):
++                qq = q_pos[qs:qs + qc]
++                qr = qq[None, :] * rho[:, None]                                   # (M, qc)
++                k0, k1 = torch.special.modified_bessel_k0(qr), torch.special.modified_bessel_k1(qr)
++                k2 = k0 + 2 * k1 / qr
++                IA[start:start + kc, qs:qs + qc] = j0w @ ((2 * qq[None, :] / rho[:, None]) * k1 - qq[None, :] ** 2 * k2)
++                IB[start:start + kc, qs:qs + qc] = j2w @ (qq[None, :] ** 2 * k2)
+         IA = IA[inverse].reshape(shape[0], shape[1], -1)
+         IB = IB[inverse].reshape(shape[0], shape[1], -1)
+         outer[:, :, pos] = 1.5 * g_dd * (IA + IB * cos2)

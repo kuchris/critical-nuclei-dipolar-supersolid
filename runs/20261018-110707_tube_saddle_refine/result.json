@@ -1,0 +1,23 @@
+{
+ "barrier": 92.3055197509002,
+ "delta_N": -653.5400583354058,
+ "residual": 5.175135536764548e-13,
+ "converged": true,
+ "stalled": false,
+ "newton_steps": 4,
+ "minres": [
+  275,
+  394,
+  396,
+  386
+ ],
+ "seconds": 34.11509132385254,
+ "index": 1,
+ "complete": true,
+ "certified": true,
+ "eigenvalues": [
+  -0.005726984625889388,
+  0.0049342858803350835,
+  0.0321736043425374
+ ]
+}

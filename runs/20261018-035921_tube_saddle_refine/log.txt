@@ -1,0 +1,6 @@
+[dipgpe.runs] recording to C:\Users\kyost\Desktop\git\qs\runs\20261018-035921_tube_saddle_refine
+  Newton 1: residual 1.706e-05  (1 s)
+  Newton 2: residual 1.167e-06  (5 s)
+  Newton 3: residual 1.195e-08  (9 s)
+  Newton 4: residual 1.198e-10  (15 s)
+barrier Omega - uniform = 7.708188 hbar omega, delta_N = -117.24, residual 1.20e-10, MINRES [13, 177, 196, 266], peak 2.3 GiB

@@ -1,0 +1,40 @@
+diff --git a/benchmarks/tube_saddle.py b/benchmarks/tube_saddle.py
+index 42cfbb2..a8f4636 100644
+--- a/benchmarks/tube_saddle.py
++++ b/benchmarks/tube_saddle.py
+@@ -473,6 +473,8 @@ def connect(args, run):
+           f"contrast {geo_s['contrast']:.3f}, {'even sector' if symmetric else 'phase condition'}", flush=True)
+     sides = {}
+     for side, sign in (("shrink", -1.0), ("grow", 1.0)):
++        if side not in args.sides.split(","):
++            continue
+         t0 = time.time()
+         trace = []
+ 
+@@ -493,6 +495,7 @@ def connect(args, run):
+                             tau=args.tau, sector=(lambda f: 0.5 * (f + mirror(f))) if symmetric else None,
+                             deflate=None if symmetric else [_dz(grid, psi_s).real.to(grid.dtype)],
+                             callback=watch, callback_every=args.every)
++        torch.save(psi.cpu(), run.data(f"{side}.pt"))
+         geo = geometry(psi)
+         final = {"omega_minus_uniform": info["omega"] - omega_U, "N_minus_uniform": info["N"] - N,
+                  "residual": info["residual"], **geo}
+@@ -507,8 +510,8 @@ def connect(args, run):
+     run.save_json("tube_saddle_connect.json", {"from_run": folder.name, "symmetric": symmetric, "mu": mu,
+                                                 "barrier": barrier, "saddle": geo_s, "eps": args.eps,
+                                                 "tau": args.tau, "sides": sides})
+-    run.result(barrier=barrier, shrink_reached=sides["shrink"]["reached"], grow_reached=sides["grow"]["reached"],
+-               connected=sides["shrink"]["reached"] and sides["grow"]["reached"])
++    run.result(barrier=barrier, **{f"{k}_reached": v["reached"] for k, v in sides.items()},
++               connected=all(v["reached"] for v in sides.values()) and len(sides) == 2)
+ 
+ 
+ def full_index(model, grid, psi, tol, iters, mu, n, x0=None, save=None):
+@@ -683,6 +686,7 @@ def main():
+     ap.add_argument("--eps", type=float, default=0.05, help="connect: start offset, in units of the nucleus norm")
+     ap.add_argument("--tau", type=float, default=0.5, help="connect: descent step")
+     ap.add_argument("--max-descent", type=int, default=8000, help="connect: descent iterations per side")
++    ap.add_argument("--sides", type=str, default="shrink,grow", help="connect: which sides to descend")
+     ap.add_argument("--grow-cells", type=float, default=3.0,
+                     help="connect: the growing side counts as reached once the nucleus is this many cells longer")
+     ap.add_argument("--sector", choices=["even", "none"], default="even",

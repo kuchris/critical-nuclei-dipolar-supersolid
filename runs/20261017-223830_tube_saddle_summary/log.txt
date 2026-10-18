@@ -1,0 +1,9 @@
+[dipgpe.runs] recording to C:\Users\kyost\Desktop\git\qs\runs\20261017-223830_tube_saddle_summary
+    a_s cells   centre    barrier index contrast  FWHM um drops bg-n /um  residual
+ 90.200    32  droplet    59.7214     1    0.543     11.2     3     3.35   9.9e-11
+ 90.210    32  droplet    63.1739     1    0.557     11.2     3     3.52   1.2e-10
+ 90.220    32  droplet    66.8543     1    0.572     11.2     3     3.72   1.6e-10
+ 90.230    32  droplet    70.8159     1    0.589     11.2     3     3.96   2.5e-10
+ 90.240    32  droplet    75.1349     2    0.607     11.2     3     4.28   4.6e-10
+ 90.200    64  droplet    59.4628  None    0.541     11.2     3     1.65   1.3e-10
+ 90.220    64  droplet    66.5371  None    0.570     11.2     3     1.82   2.5e-10
