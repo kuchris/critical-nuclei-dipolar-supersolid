@@ -12,9 +12,10 @@ package name `qs`; the code is otherwise identical.
 `uv run python benchmarks/c3a_figures.py` (run 20261018-140939; reads the run
 records below, no simulation). Fixed μ, 32 cells (64 at 89.86–89.88 a0).
 The journal-style figures of the manuscript (printed width 510 pt, 8 pt STIX)
-are from run 20261018-172653 (Fig. 7(a): schematic of the staircase at 90.272
+are from run 20261018-180445 (Fig. 7(a): schematic of the staircase at 90.272
 with the computed line densities, revised after the Codex review, ISSUES C3-22;
-Fig. 8(a): typical case only; earlier 20261018-171201, -161440 and -154548),
+Fig. 7(c): the σ inset no longer overlaps its tick labels; Fig. 8(a): typical
+case only; earlier 20261018-172653, -171201, -161440 and -154548),
 whose result.json is identical. Barriers between
 successive pinned states at 90.272 (from the stationary energies): M1 to S1
 0.022, M1 to S2 0.144 ħω⊥ (0.16 and 1.0 nK), against E_b = 91.416 from the

@@ -1,0 +1,24 @@
+diff --git a/benchmarks/c3a_figures.py b/benchmarks/c3a_figures.py
+index dddc222..c046132 100644
+--- a/benchmarks/c3a_figures.py
++++ b/benchmarks/c3a_figures.py
+@@ -820,11 +820,16 @@ def fig7(out):
+     bx.set_xlabel(r"drive $\Delta\omega$ ($\hbar\omega_\perp\,\mu$m$^{-1}$)")
+     bx.set_ylabel(r"$2\sigma - E_b$ ($\hbar\omega_\perp$)")
+     title(bx, "(c)", "deficit to the thin-wall limit")
+-    ins = bx.inset_axes([0.12, 0.6, 0.33, 0.35])
++    ins = bx.inset_axes([0.22, 0.62, 0.25, 0.33])         # clear of the main axis and of the 90.26 point
+     ins.plot([s_ for s_, _ in SIGMA], [sigma(r) for _, r in SIGMA], "o-", ms=3, lw=0.8, color="#ff7f0e")
+-    ins.set_xlabel(r"$a_s$ ($a_0$)", fontsize=6.5, labelpad=1)
+-    ins.set_ylabel(r"$\sigma$ ($\hbar\omega_\perp$)", fontsize=6.5, labelpad=1)
++    ins.set_xlim(90.246, 90.278)                           # the end points inside the frame
++    ins.set_ylim(46.0, 48.0)
++    ins.set_xticks([90.25, 90.27])
++    ins.set_yticks([46.5, 47.0, 47.5])
+     ins.tick_params(labelsize=6)
++    ins.set_xlabel(r"$a_s$ ($a_0$)", fontsize=6.5, labelpad=1)
++    ins.set_ylabel(r"$\sigma$ ($\hbar\omega_\perp$)", fontsize=6.5)
++    ins.yaxis.set_label_coords(-0.36, 0.5)                 # left of the tick labels
+     save(fig, out, "fig7_edge")
+     return {float(x): (round(float(v), 3), round(float(d), 3)) for x, v, d in zip(a, w, deficit)}
+ 

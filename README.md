@@ -19,7 +19,7 @@ descents from the saddles and a staircase continuation of pinned states.
 | folder | content |
 |---|---|
 | `benchmarks/` | `tube_saddle.py` (string, Newton refinement, Hessian, asymmetric saddles, descents, staircase), `tube_coexistence.py` (Maxwell construction), `tube_localized.py` (localized states, interface tension), `tube_roton.py` (Bogoliubov roton spinodal), `c3a_figures.py` (Figures 1–8) |
-| `runs/` | 115 run records: command, parameters, code version, environment, log and results (JSON: barriers, ΔN, line densities, Hessian eigenvalues, descent traces) of every computation |
+| `runs/` | 116 run records: command, parameters, code version, environment, log and results (JSON: barriers, ΔN, line densities, Hessian eigenvalues, descent traces) of every computation |
 | `docs/C3a_record.md` | log of the results and of the issues found and resolved |
 | `src/dipgpe/`, `tests/` | the solver and its tests |
 | `tools/export_c3a_data.py` | how the data archive was written (from the run records with their fields, which this repository leaves out) |
