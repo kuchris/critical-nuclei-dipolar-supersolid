@@ -1,7 +1,7 @@
 # Critical nuclei and nucleation barriers at the first-order superfluid–supersolid transition of a dipolar gas
 
-Code: Zenodo *code archive: DOI to be added*.
-Data: Zenodo [10.5281/zenodo.23449282](https://doi.org/10.5281/zenodo.23449282) (`data_C3a.zip`, 638 MB).
+Code: Zenodo [10.5281/zenodo.23449690](https://doi.org/10.5281/zenodo.23449690) (all versions).
+Data: Zenodo [10.5281/zenodo.23449529](https://doi.org/10.5281/zenodo.23449529) (`data_C3a.zip`, 638 MB).
 
 Code, run records and data of the paper
 
@@ -59,7 +59,7 @@ this paper (see `RELEASE_SOURCE.txt`). In each run record, `git.diff`
 ## Citation
 
 If you use this code or data, please cite the paper and the Zenodo archives:
-data [10.5281/zenodo.23449282](https://doi.org/10.5281/zenodo.23449282), code *code archive: DOI to be added*.
+data [10.5281/zenodo.23449529](https://doi.org/10.5281/zenodo.23449529), code [10.5281/zenodo.23449690](https://doi.org/10.5281/zenodo.23449690).
 
 ## License
 
