@@ -1,7 +1,7 @@
 # Critical nuclei and nucleation barriers at the first-order superfluid–supersolid transition of a dipolar gas
 
 Code: Zenodo *code archive: DOI to be added*.
-Data: Zenodo *data archive: DOI to be added* (`data_C3a.zip`, 638 MB).
+Data: Zenodo [10.5281/zenodo.23449282](https://doi.org/10.5281/zenodo.23449282) (`data_C3a.zip`, 638 MB).
 
 Code, run records and data of the paper
 
@@ -33,9 +33,9 @@ descents from the saddles and a staircase continuation of pinned states.
 
 The data archive holds the 22 critical nuclei of Table II as real fields in
 double precision, with their records (see its README). Unpack it here, so that
-`data_C3a/states/` exists. The fields of the other states (fixed-N saddles,
-staircase states, minima; 12 GB) are not archived; their numbers are in the
-run records.
+`data_C3a/states/` exists (SHA-256 of `data_C3a.zip`: `49f3db95483bc2dcfe5690d6eab48c572978a1c99ce7e3403587a2a94c03c43a`). The fields
+of the other states (fixed-N saddles, staircase states, minima; 12 GB) are not
+archived; their numbers are in the run records.
 
 ## Reproduce the paper
 
@@ -58,8 +58,8 @@ this paper (see `RELEASE_SOURCE.txt`). In each run record, `git.diff`
 
 ## Citation
 
-If you use this code or data, please cite the paper and the Zenodo archives
-(identifiers to be added).
+If you use this code or data, please cite the paper and the Zenodo archives:
+data [10.5281/zenodo.23449282](https://doi.org/10.5281/zenodo.23449282), code *code archive: DOI to be added*.
 
 ## License
 

@@ -5,6 +5,10 @@ title: "Code and data for: Critical nuclei and nucleation barriers at the first-
 type: software
 license: MIT
 repository-code: "https://github.com/kuchris/critical-nuclei-dipolar-supersolid"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.23449282"
+    description: "Data (data_C3a.zip)"
 authors:
   - family-names: "Wong"
     given-names: "Wai Kui"
