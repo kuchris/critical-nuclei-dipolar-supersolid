@@ -1,0 +1,55 @@
+diff --git a/benchmarks/c3a_figures.py b/benchmarks/c3a_figures.py
+index 183cae9..dddc222 100644
+--- a/benchmarks/c3a_figures.py
++++ b/benchmarks/c3a_figures.py
+@@ -426,23 +426,31 @@ def rolling_schematic(ax):
+             color="0.3")
+ 
+ 
++def stationary_path(points, n=40):
++    """Schematic curve through stationary points: a smoothstep between neighbours, so that each point is an
++    extremum with zero slope and no other extremum lies between them."""
++    t = np.arange(n) / n
++    s = 3 * t ** 2 - 2 * t ** 3
++    xs = [x0 + (x1 - x0) * t for (x0, _), (x1, _) in zip(points[:-1], points[1:])] + [[points[-1][0]]]
++    ys = [y0 + (y1 - y0) * s for (_, y0), (_, y1) in zip(points[:-1], points[1:])] + [[points[-1][1]]]
++    return np.concatenate(xs), np.concatenate(ys)
++
++
+ def staircase_schematic(ax):
+     """Fig. 7(a): growth beyond the first saddle at 90.272 a0 drawn as an energy landscape. Positions and heights
+     are schematic (the order of the stationary energies is kept, not their spacing); the values are printed with
+-    the computed line densities below. Returns the marker positions of S1, M1, S2, M2."""
++    the computed line densities below. Only the computed stationary states are extrema of the solid curve; what
++    follows M2 was not computed (dashed)."""
+     ax.axis("off")
+     ax.set_xlim(0, 10)
+     ax.set_ylim(-0.7, 3.15)
+     U, S1, M1, S2, M2 = (0.7, 0.0), (3.3, 2.2), (4.3, 2.0), (5.5, 2.85), (7.6, 0.95)
+-    line = catmull([(0.0, 0.0), U, (1.3, 0.05), (2.1, 0.9), (2.8, 1.85), S1, (3.8, 2.08), M1, (4.9, 2.35), S2,
+-                    (6.2, 2.25), (7.0, 1.2), M2, (8.1, 1.0), (8.5, 0.85)], 16)
+-    ax.plot(line[:, 0], line[:, 1], color="0.25", lw=1.2)
+-    ax.plot([8.5, 9.25], [0.85, 0.3], color="0.25", lw=1.2, ls=(0, (3, 2)))
+-    ax.text(9.3, 0.62, "further growth\n(not followed)", fontsize=6.5, color="0.35", va="bottom")
+-    one = catmull([U, (1.3, 0.05), (2.1, 0.9), (2.8, 1.85), (3.5, 2.3), (4.4, 2.25), (5.6, 1.75), (7.0, 1.05),
+-                   (8.4, 0.5)], 16)
+-    ax.plot(one[:, 0], one[:, 1], color="0.6", lw=0.8, ls=(0, (2, 2)))
+-    ax.text(5.9, 1.45, "without pinning:\none barrier", fontsize=6.5, color="0.5", ha="right", va="top")
++    ax.plot(*stationary_path([(0.0, 0.0), U, S1, M1, S2, M2]), color="0.25", lw=1.2)
++    ax.plot(*stationary_path([M2, (8.7, 1.3)]), color="0.25", lw=1.2, ls=(0, (3, 2)))
++    ax.text(8.8, 1.3, "further growth\n(not followed)", fontsize=6.5, color="0.35", va="center")
++    ax.plot(*stationary_path([U, (3.6, 2.3), (8.4, 0.5)]), color="0.6", lw=0.8, ls=(0, (2, 2)))
++    ax.text(6.4, 1.05, "without pinning\n(conceptual, not calculated)", fontsize=6.5, color="0.5", ha="right",
++            va="top")
+     red = STYLE["second rung"][1]
+     ax.plot(*U, "s", ms=4.5, color="0.35", zorder=4)
+     for (x, y), m in ((S1, "^"), (M1, "o"), (S2, "^"), (M2, "o")):
+@@ -465,7 +473,7 @@ def staircase_schematic(ax):
+                                  color=blue, shrinkA=0, shrinkB=0))
+     for y in (1.35, 1.47):                                         # not to scale
+         ax.plot([0.21, 0.39], [y - 0.06, y + 0.06], color=blue, lw=0.8)
+-    ax.text(0.42, 2.72, "$E_b = 91.416$: the highest saddle,\nmeasured from the uniform state", fontsize=6.5,
++    ax.text(0.42, 2.72, "$E_b = 91.416$: highest saddle\non this path, from the uniform state", fontsize=6.5,
+             color=blue, ha="left", va="top")
+     ax.text(5.0, -0.62, r"energies schematic, not to scale; $\Omega - \Omega_U$ of the computed states "
+                         r"($\hbar\omega_\perp$) with their line densities below", fontsize=6.5, color="0.3",

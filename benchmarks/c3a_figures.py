@@ -202,7 +202,12 @@ def delta_n(ref):
 def line_density(ref):
     """Line density (atoms per um) and its grid step (um)."""
     if isinstance(ref, tuple):                         # staircase states keep only the field
-        psi = field(ref[0], f"rung{ref[1]}")
+        rid, name = ref[0], f"rung{ref[1]}"
+        saved = DATA.parent / "line_densities.json"    # the reduced data keep the line densities of all of them
+        if not (folder(rid) / "data" / f"{name}.pt").exists() and saved.exists():
+            rec = json.loads(saved.read_text(encoding="utf-8"))[f"{rid}_{name}"]
+            return np.asarray(rec["line_density_per_um"]), rec["dz_um"]
+        psi = field(rid, name)
         return (psi.abs() ** 2).sum((0, 1)).double().numpy() * DX * DX / PER_L, CELL_UM / NZ_CELL
     rec = record(ref)
     return np.asarray(rec["line_density_per_um"]), rec["dz_um"]
@@ -398,33 +403,81 @@ def sliding_schematic(ax):
 
 
 def rolling_schematic(ax):
-    """Fig. 8(a): the saddle nudged both ways; near the edge the growing side stops on a plateau."""
-    typical = ((0.0, 0.0), (0.12, 0.02), (0.30, 0.55), (0.45, 1.0), (0.62, 0.55), (0.80, -0.55), (0.95, -1.6))
-    edge = ((0.0, 0.0), (0.12, 0.02), (0.28, 0.6), (0.38, 0.95), (0.47, 0.70), (0.55, 1.05), (0.68, 0.55),
-            (0.82, -0.45), (0.95, -1.4))
-    for x0, pts, label, ball, stop in ((0.4, typical, "typical (89.88, 90.20)", 0.45, None),
-                                      (7.4, edge, "near the edge (90.27, 90.272)", 0.38, 0.47)):
-        def X(u, x0=x0):
-            return x0 + 6.0 * np.asarray(u)
+    """Fig. 8(a): the saddle nudged both ways (near the edge the growing side stops in a pinned state: Fig. 7(a))."""
+    pts = ((0.0, 0.0), (0.12, 0.02), (0.30, 0.55), (0.45, 1.0), (0.62, 0.55), (0.80, -0.55), (0.95, -1.6))
+    ball = 0.45
 
-        def Y(e):
-            return 1.45 + 0.85 * np.asarray(e)
-        c = catmull(pts)
-        E = dict(pts)
-        ax.plot(X(c[:, 0]), Y(c[:, 1]), color="0.4", lw=0.9)
-        bx, by = float(X(ball)), float(Y(E[ball])) + 0.15
-        ax.add_patch(Circle((bx, by), 0.13, fc="#D85A30", ec="none", zorder=3))
-        arrow(ax, (bx - 0.2, by + 0.02), (float(X(0.18)), float(Y(0.22)) + 0.2), rad=0.35, ls="--")
-        if stop is None:
-            arrow(ax, (bx + 0.2, by + 0.02), (float(X(0.7)), float(Y(0.1)) + 0.25), rad=-0.35)
-        else:
-            sx, sy = float(X(stop)), float(Y(E[stop])) + 0.13
-            arrow(ax, (bx + 0.16, by - 0.02), (sx - 0.05, sy + 0.02), rad=-0.5)
-            ax.add_patch(Circle((sx, sy), 0.09, fc="none", ec="0.25", lw=0.8))
-            ax.text(sx, sy - 0.5, "plateau", ha="center", va="center", fontsize=6.5)
-        ax.text(float(X(0.0)), float(Y(0.0)) - 0.32, "uniform", fontsize=6.5)
-        ax.text(float(X(0.95)) + 0.1, float(Y(pts[-1][1])) + 0.15, "crystal\ngrows", fontsize=6.5)
-        ax.text(float(X(0.5)), 2.85, label, ha="center", va="center", fontsize=7)
+    def X(u):
+        return 0.6 + 9.0 * np.asarray(u)
+
+    def Y(e):
+        return 1.45 + 0.85 * np.asarray(e)
+    c = catmull(pts)
+    E = dict(pts)
+    ax.plot(X(c[:, 0]), Y(c[:, 1]), color="0.4", lw=0.9)
+    bx, by = float(X(ball)), float(Y(E[ball])) + 0.15
+    ax.add_patch(Circle((bx, by), 0.13, fc="#D85A30", ec="none", zorder=3))
+    arrow(ax, (bx - 0.2, by + 0.02), (float(X(0.18)), float(Y(0.22)) + 0.2), rad=0.35, ls="--")
+    arrow(ax, (bx + 0.2, by + 0.02), (float(X(0.7)), float(Y(0.1)) + 0.25), rad=-0.35)
+    ax.text(float(X(0.0)), float(Y(0.0)) - 0.32, "uniform", fontsize=6.5)
+    ax.text(float(X(0.95)) + 0.1, float(Y(pts[-1][1])) + 0.15, "crystal\ngrows", fontsize=6.5)
+    ax.text(float(X(0.5)), 2.85, "saddle", ha="center", va="center", fontsize=7)
+    ax.text(10.4, 1.55, "near the edge the growing side\nstops in a pinned state: Fig. 7(a)", va="center", fontsize=6.5,
+            color="0.3")
+
+
+def stationary_path(points, n=40):
+    """Schematic curve through stationary points: a smoothstep between neighbours, so that each point is an
+    extremum with zero slope and no other extremum lies between them."""
+    t = np.arange(n) / n
+    s = 3 * t ** 2 - 2 * t ** 3
+    xs = [x0 + (x1 - x0) * t for (x0, _), (x1, _) in zip(points[:-1], points[1:])] + [[points[-1][0]]]
+    ys = [y0 + (y1 - y0) * s for (_, y0), (_, y1) in zip(points[:-1], points[1:])] + [[points[-1][1]]]
+    return np.concatenate(xs), np.concatenate(ys)
+
+
+def staircase_schematic(ax):
+    """Fig. 7(a): growth beyond the first saddle at 90.272 a0 drawn as an energy landscape. Positions and heights
+    are schematic (the order of the stationary energies is kept, not their spacing); the values are printed with
+    the computed line densities below. Only the computed stationary states are extrema of the solid curve; what
+    follows M2 was not computed (dashed)."""
+    ax.axis("off")
+    ax.set_xlim(0, 10)
+    ax.set_ylim(-0.7, 3.15)
+    U, S1, M1, S2, M2 = (0.7, 0.0), (3.3, 2.2), (4.3, 2.0), (5.5, 2.85), (7.6, 0.95)
+    ax.plot(*stationary_path([(0.0, 0.0), U, S1, M1, S2, M2]), color="0.25", lw=1.2)
+    ax.plot(*stationary_path([M2, (8.7, 1.3)]), color="0.25", lw=1.2, ls=(0, (3, 2)))
+    ax.text(8.8, 1.3, "further growth\n(not followed)", fontsize=6.5, color="0.35", va="center")
+    ax.plot(*stationary_path([U, (3.6, 2.3), (8.4, 0.5)]), color="0.6", lw=0.8, ls=(0, (2, 2)))
+    ax.text(6.4, 1.05, "without pinning\n(conceptual, not calculated)", fontsize=6.5, color="0.5", ha="right",
+            va="top")
+    red = STYLE["second rung"][1]
+    ax.plot(*U, "s", ms=4.5, color="0.35", zorder=4)
+    for (x, y), m in ((S1, "^"), (M1, "o"), (S2, "^"), (M2, "o")):
+        ax.plot(x, y, m, ms=5, mfc=red if m == "^" else "white", mec=red, mew=1.0, zorder=4)
+    ax.text(U[0], U[1] - 0.17, "uniform", fontsize=6.5, ha="center", va="top")
+    ax.text(S1[0] - 0.13, S1[1] + 0.02, "S$_1$", fontsize=7, ha="right", va="bottom")
+    ax.text(M1[0], M1[1] - 0.16, "M$_1$", fontsize=7, ha="center", va="top")
+    ax.text(S2[0] + 0.13, S2[1] + 0.02, "S$_2$", fontsize=7, ha="left", va="bottom")
+    ax.text(M2[0], M2[1] - 0.16, "M$_2$", fontsize=7, ha="center", va="top")
+    brown = "#9a3412"                                              # barriers between successive pinned states
+    ax.plot([S1[0] + 0.1, M1[0] - 0.08], [S1[1]] * 2, color=brown, lw=0.5, ls=":")
+    ax.plot([M1[0] + 0.05, S2[0] - 0.1], [S2[1]] * 2, color=brown, lw=0.5, ls=":")
+    arrow(ax, (M1[0] - 0.1, M1[1] + 0.06), (M1[0] - 0.1, S1[1]), color=brown)
+    arrow(ax, (M1[0] + 0.07, M1[1] + 0.06), (M1[0] + 0.07, S2[1]), color=brown)
+    ax.text(M1[0] - 0.18, S1[1] + 0.13, "0.022", fontsize=6.5, color=brown, ha="right", va="bottom")
+    ax.text(M1[0] + 0.15, 2.55, "0.144", fontsize=6.5, color=brown, ha="left")
+    blue = "#1f4e79"                                               # the barrier from the uniform state
+    ax.plot([0.3, S2[0] - 0.12], [S2[1]] * 2, color=blue, lw=0.5, ls=":")
+    ax.add_patch(FancyArrowPatch((0.3, 0.0), (0.3, S2[1]), arrowstyle="<|-|>", mutation_scale=7, lw=0.8,
+                                 color=blue, shrinkA=0, shrinkB=0))
+    for y in (1.35, 1.47):                                         # not to scale
+        ax.plot([0.21, 0.39], [y - 0.06, y + 0.06], color=blue, lw=0.8)
+    ax.text(0.42, 2.72, "$E_b = 91.416$: highest saddle\non this path, from the uniform state", fontsize=6.5,
+            color=blue, ha="left", va="top")
+    ax.text(5.0, -0.62, r"energies schematic, not to scale; $\Omega - \Omega_U$ of the computed states "
+                        r"($\hbar\omega_\perp$) with their line densities below", fontsize=6.5, color="0.3",
+            ha="center")
 
 
 def fig1(out):
@@ -686,7 +739,33 @@ def fig6(out):
 
 def fig7(out):
     _, drive = coexistence()
-    fig, (ax, bx) = plt.subplots(1, 2, figsize=(W2, 2.9), gridspec_kw={"width_ratios": [1.3, 1]})
+    fig = plt.figure(figsize=(W2, 5.0))
+    gs = fig.add_gridspec(3, 10, height_ratios=[1.3, 0.62, 2.5])
+    sx = fig.add_subplot(gs[0, :])
+    staircase_schematic(sx)
+    title(sx, "(a)", r"growth beyond the first saddle at $90.272\,a_0$")
+    path = [ref for ref, kind in STAIRS[90.272] if kind != "other"]          # S1, M1, S2, M2 along the path
+    names = ("S$_1$ first saddle", "M$_1$ pinned minimum", "S$_2$ second saddle", "M$_2$ next minimum")
+    thumbs = [("uniform superfluid", None, 0.0)] + [(n, r, barrier(r)) for n, r in zip(names, path)]
+    for k, (name, ref, omega) in enumerate(thumbs):
+        th = fig.add_subplot(gs[1, 2 * k:2 * k + 2])
+        if ref is None:
+            z, dn = np.array([-30.0, 30.0]), np.zeros(2)
+        else:
+            line, dz = line_density(ref)
+            z = (np.arange(line.size) - line.size // 2) * dz
+            dn = (line - DENSITY) / 1e3
+        th.plot(z, dn, lw=0.6, color="0.4" if ref is None else STYLE["droplet"][1])
+        th.set_xlim(-30, 30)
+        th.set_ylim(-5, 5)
+        th.set_xticks([])
+        th.set_yticks([])
+        th.tick_params(top=False, right=False)
+        for s in th.spines.values():
+            s.set_linewidth(0.4)
+            s.set_color("0.6")
+        th.set_title(f"{name}\n{omega:.3f}" if ref is not None else f"{name}\n0", fontsize=6.5, pad=2)
+    ax, bx = fig.add_subplot(gs[2, :6]), fig.add_subplot(gs[2, 6:])
     colors = {90.272: "#d62728", 90.273: "#1f77b4"}
     for a_s, states in STAIRS.items():
         col = colors[a_s]
@@ -702,16 +781,20 @@ def fig7(out):
             k = 1 + next(i for i, t in enumerate(tr) if t["iteration"] >= 50)
             ax.plot(x[:k + 1], y[:k + 1], "--", color=col, lw=0.8, alpha=0.6)
             ax.plot(x[k:], y[k:], "-", color=col, lw=0.8, alpha=0.6)
-        path = [ref for ref, kind in states if kind != "other"]
-        ax.plot([-delta_n(r) for r in path], [barrier(r) for r in path], ":", color=col, lw=0.8)
+        on_path = [ref for ref, kind in states if kind != "other"]
+        ax.plot([-delta_n(r) for r in on_path], [barrier(r) for r in on_path], ":", color=col, lw=0.8)
         for ref, kind in states:
             m = {"saddle": "^", "minimum": "o", "other": "x"}[kind]
             ax.plot(-delta_n(ref), barrier(ref), m, color=col, ms=4, mfc=col if kind == "saddle" else "white")
+    for ref, label, (dx, dy, ha) in zip(path, ("S$_1$", "M$_1$", "S$_2$", "M$_2$"),
+                                        ((-5, 4, "right"), (0, -11, "center"), (0, 5, "center"), (5, -9, "left"))):
+        ax.annotate(label, (-delta_n(ref), barrier(ref)), xytext=(dx, dy), textcoords="offset points", ha=ha,
+                    fontsize=7, color=colors[90.272])
     ax.set_xlim(450, 1300)
     ax.set_ylim(89.4, 92.7)
     ax.set_xlabel(r"$-\Delta N$ (atoms expelled by the nucleus)")
     ax.set_ylabel(r"$\Omega - \Omega_U$ ($\hbar\omega_\perp$)")
-    title(ax, "(a)", "growth path near the edge")
+    title(ax, "(b)", "computed states near the edge")
     handles = [Line2D([], [], color=colors[a], lw=2, label=f"{a:g} $a_0$") for a in colors] + [
         Line2D([], [], marker="^", color="0.3", ls="none", ms=4, label="saddle (index 1)"),
         Line2D([], [], marker="o", color="0.3", mfc="white", ls="none", ms=4, label="minimum (index 0)"),
@@ -736,7 +819,7 @@ def fig7(out):
     bx.set_ylim(-1.0, 1.15 * deficit.max())               # with pinning the limit is 2 sigma + Delta P
     bx.set_xlabel(r"drive $\Delta\omega$ ($\hbar\omega_\perp\,\mu$m$^{-1}$)")
     bx.set_ylabel(r"$2\sigma - E_b$ ($\hbar\omega_\perp$)")
-    title(bx, "(b)", "deficit to the thin-wall limit")
+    title(bx, "(c)", "deficit to the thin-wall limit")
     ins = bx.inset_axes([0.12, 0.6, 0.33, 0.35])
     ins.plot([s_ for s_, _ in SIGMA], [sigma(r) for _, r in SIGMA], "o-", ms=3, lw=0.8, color="#ff7f0e")
     ins.set_xlabel(r"$a_s$ ($a_0$)", fontsize=6.5, labelpad=1)
@@ -772,7 +855,7 @@ def fig8(out):
     handles, _ = axs[0].get_legend_handles_labels()
     handles += [Line2D([], [], color="0.3", ls="--", label="shrinking side"),
                 Line2D([], [], color="0.3", label="growing side"),
-                Line2D([], [], color="0.3", ls=":", lw=0.6, label=r"$E_b$")]
+                Line2D([], [], color="0.3", ls=":", lw=0.6, label=r"$\Omega_s - \Omega_U$")]
     axs[0].set_xlabel("descent iteration")
     axs[0].set_ylabel(r"$\Omega_s - \Omega$ ($\hbar\omega_\perp$)")
     title(axs[0], "(b)", "energy released")

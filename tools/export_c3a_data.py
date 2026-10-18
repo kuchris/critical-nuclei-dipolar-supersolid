@@ -9,6 +9,7 @@ and Hessians can be recomputed on the grid of the paper:
                                                       residuals, line density, Hessian where computed)
   data_C3a/states/<a_s>_<run id>_<state>/params.json  command, parameters, code version, environment
   data_C3a/index.csv                                  one row per state
+  data_C3a/line_densities.json                        line densities of the staircase states (Fig. 7)
   data_C3a/grid.json, README.md, EXPORT_SOURCE.txt, MANIFEST.sha256
   data_C3a.zip                                        the whole folder
 
@@ -57,6 +58,7 @@ energy above the uniform superfluid, Omega - Omega_U, is the barrier E_b.
 | `states/<a_s>_<run>_<state>/psi.npz` | `psi`: the field psi[x, y, z] (float64; the states are real) |
 | `states/<a_s>_<run>_<state>/record.json` | the record of the computation (barrier, Delta N, mu, Newton residuals, line density, Hessian) |
 | `states/<a_s>_<run>_<state>/params.json` | command, parameters, code version (git commit) and environment of the run |
+| `line_densities.json` | line densities (atoms per um) of the staircase states near the edge (Fig. 7), with their Omega - Omega_U and Delta N; their fields are not included |
 | `grid.json` | grid, units and model parameters |
 | `MANIFEST.sha256` | checksums; `EXPORT_SOURCE.txt`: the commit of the export |
 
@@ -140,6 +142,16 @@ def main():
                      "N": f"{n_atoms:.3f}", "residual": f"{resid:.2g}", "hessian_eigenvalues": eigs(hess),
                      "run": rid, "state": name, "folder": f"states/{folder}"})
         print(f"{a_s:.3f} {kind:12s} {cells} cells  E_b {eb:.4f}  dN {dn:.1f}  {rid} {name}", flush=True)
+    # line densities of the staircase states near the edge (Fig. 7), whose fields are not archived
+    lines = {}
+    for a_s, states in F.STAIRS.items():
+        for ref, kind in states:
+            if isinstance(ref, tuple):
+                line, dz = F.line_density(ref)
+                lines[f"{ref[0]}_rung{ref[1]}"] = {"a_s": a_s, "kind": kind, "omega_minus_uniform": F.barrier(ref),
+                                                   "delta_N": F.delta_n(ref), "dz_um": dz,
+                                                   "line_density_per_um": [float(v) for v in line]}
+    (OUT / "line_densities.json").write_text(json.dumps(lines, indent=1), encoding="utf-8")
     with open(OUT / "index.csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=list(rows[0]))
         w.writeheader()
